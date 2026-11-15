@@ -1,4 +1,3 @@
-
 using System.Globalization;
 using System.Net;
 using DiveHub.Application;
@@ -14,7 +13,13 @@ public static class CustomerBookingWebEndpoints
         this IEndpointRouteBuilder app)
     {
         app.MapPost("/book/create", CreateAsync)
-            .RequireAuthorization();
+            .RequireAuthorization("CustomerOnly");
+
+        var notifications = app.MapGroup("/customer/notifications")
+            .RequireAuthorization("CustomerOnly");
+
+        notifications.MapPost("/{id:long}/read", ReadAsync);
+        notifications.MapPost("/read-all", ReadAllAsync);
 
         return app;
     }
@@ -26,20 +31,16 @@ public static class CustomerBookingWebEndpoints
         IConfiguration configuration,
         CancellationToken ct)
     {
-        if (!await antiforgery.IsRequestValidAsync(context))
-            return Results.BadRequest("Invalid security token.");
-
-        if (!context.Request.HasFormContentType)
-            return Results.BadRequest("Invalid booking form.");
+        if (!context.Request.HasFormContentType ||
+            !await antiforgery.IsRequestValidAsync(context))
+        {
+            return Results.BadRequest("Invalid form or security token.");
+        }
 
         var form = await context.Request.ReadFormAsync(ct);
 
-        var activityText = form["ActivityId"].ToString();
-        var dateText = form["ActivityDate"].ToString();
-        var participantsText = form["ParticipantCount"].ToString();
-
         if (!int.TryParse(
-                activityText,
+                form["ActivityId"].ToString(),
                 NumberStyles.None,
                 CultureInfo.InvariantCulture,
                 out var activityId) ||
@@ -49,7 +50,7 @@ public static class CustomerBookingWebEndpoints
         }
 
         if (!DateOnly.TryParseExact(
-                dateText,
+                form["ActivityDate"].ToString(),
                 "yyyy-MM-dd",
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.None,
@@ -65,11 +66,13 @@ public static class CustomerBookingWebEndpoints
             return Invalid(activityId, "date");
 
         if (!int.TryParse(
-                participantsText,
+                form["ParticipantCount"].ToString(),
                 NumberStyles.None,
                 CultureInfo.InvariantCulture,
                 out var participants) ||
-            participants is < 1 or > 250)
+            participants < 1 ||
+            participants >
+                ActivityCatalogRules.MaximumAllowedParticipants)
         {
             return Invalid(activityId, "participants");
         }
@@ -104,11 +107,10 @@ public static class CustomerBookingWebEndpoints
         }
 
         var token = await context.GetTokenAsync(
-            "DiveHubWeb",
-            "access_token");
+            "DiveHubWeb", "access_token");
 
         if (string.IsNullOrWhiteSpace(token))
-            return Results.Redirect("/login?error=expired");
+            return Results.Redirect("/customer/login?error=expired");
 
         var request = new CreateCustomerBookingRequest(
             activityId,
@@ -119,31 +121,42 @@ public static class CustomerBookingWebEndpoints
             email,
             phone,
             string.IsNullOrWhiteSpace(whatsapp)
-                ? null
-                : whatsapp,
+                ? null : whatsapp,
             byEmail,
             byPhone,
             byWhatsApp);
 
         try
         {
+            var activities = await api.GetActivitiesAsync(ct);
+
+            var activity = activities.FirstOrDefault(
+                x => x.Id == activityId);
+
+            if (activity is null)
+                return Invalid(activityId, "activity");
+
+            if (!ActivityCatalogRules.HasValidCapacity(
+                    activity.MaxParticipants) ||
+                participants > activity.MaxParticipants)
+            {
+                return Invalid(activityId, "participants");
+            }
+
             var result = await api.CreateAsync(
-                token,
-                request,
-                ct);
+                token, request, ct);
 
             return result switch
             {
                 HttpStatusCode.Created =>
-                    Results.Redirect(
-                        "/my-reservations?status=created"),
+                    Results.Redirect("/my-reservations?status=created"),
 
                 HttpStatusCode.BadRequest =>
                     Invalid(activityId, "server"),
 
                 HttpStatusCode.Unauthorized or
                 HttpStatusCode.Forbidden =>
-                    Results.Redirect("/login?error=expired"),
+                    Results.Redirect("/customer/login?error=expired"),
 
                 _ => Results.Redirect(
                     $"/book?activityId={activityId}&status=error")
@@ -154,10 +167,86 @@ public static class CustomerBookingWebEndpoints
             return Results.Redirect(
                 $"/book?activityId={activityId}&status=error");
         }
-        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        catch (TaskCanceledException)
+            when (!ct.IsCancellationRequested)
         {
             return Results.Redirect(
                 $"/book?activityId={activityId}&status=error");
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return Results.Redirect(
+                $"/book?activityId={activityId}&status=error");
+        }
+    }
+
+    private static Task<IResult> ReadAsync(
+        long id,
+        HttpContext context,
+        IAntiforgery antiforgery,
+        CustomerBookingApiClient api,
+        CancellationToken ct)
+    {
+        return MarkAsync(id, context, antiforgery, api, ct);
+    }
+
+    private static Task<IResult> ReadAllAsync(
+        HttpContext context,
+        IAntiforgery antiforgery,
+        CustomerBookingApiClient api,
+        CancellationToken ct)
+    {
+        return MarkAsync(null, context, antiforgery, api, ct);
+    }
+
+    private static async Task<IResult> MarkAsync(
+        long? id,
+        HttpContext context,
+        IAntiforgery antiforgery,
+        CustomerBookingApiClient api,
+        CancellationToken ct)
+    {
+        if (!context.Request.HasFormContentType ||
+            !await antiforgery.IsRequestValidAsync(context))
+        {
+            return Results.BadRequest("Invalid form or security token.");
+        }
+
+        if (id is <= 0)
+            return Results.BadRequest();
+
+        var token = await context.GetTokenAsync(
+            "DiveHubWeb", "access_token");
+
+        if (string.IsNullOrWhiteSpace(token))
+            return Results.Redirect("/customer/login?error=expired");
+
+        try
+        {
+            var status = id.HasValue
+                ? await api.MarkNotificationReadAsync(token, id.Value, ct)
+                : await api.MarkAllNotificationsReadAsync(token, ct);
+
+            return status switch
+            {
+                HttpStatusCode.NoContent =>
+                    Results.Redirect("/notifications"),
+
+                HttpStatusCode.Unauthorized or
+                HttpStatusCode.Forbidden =>
+                    Results.Redirect("/customer/login?error=expired"),
+
+                _ => Results.Redirect("/notifications?status=error")
+            };
+        }
+        catch (HttpRequestException)
+        {
+            return Results.Redirect("/notifications?status=error");
+        }
+        catch (TaskCanceledException)
+            when (!ct.IsCancellationRequested)
+        {
+            return Results.Redirect("/notifications?status=error");
         }
     }
 
@@ -170,24 +259,24 @@ public static class CustomerBookingWebEndpoints
 
     private static string GetContactErrorField(string message)
     {
-        if (message.Contains("full name",
-            StringComparison.OrdinalIgnoreCase))
+        if (message.Contains(
+            "full name", StringComparison.OrdinalIgnoreCase))
             return "name";
 
-        if (message.Contains("email",
-            StringComparison.OrdinalIgnoreCase))
-            return "email";
-
-        if (message.Contains("phone",
-            StringComparison.OrdinalIgnoreCase))
-            return "phone";
-
-        if (message.Contains("WhatsApp",
-            StringComparison.OrdinalIgnoreCase))
+        if (message.Contains(
+            "WhatsApp", StringComparison.OrdinalIgnoreCase))
             return "whatsapp";
 
-        if (message.Contains("contact method",
-            StringComparison.OrdinalIgnoreCase))
+        if (message.Contains(
+            "email", StringComparison.OrdinalIgnoreCase))
+            return "email";
+
+        if (message.Contains(
+            "phone", StringComparison.OrdinalIgnoreCase))
+            return "phone";
+
+        if (message.Contains(
+            "contact method", StringComparison.OrdinalIgnoreCase))
             return "preferences";
 
         return "contact";

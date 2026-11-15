@@ -1,15 +1,10 @@
-
 @page "/book"
 @page "/book/{ActivityId:int}"
 
-@attribute [Authorize]
+@attribute [Authorize(Policy = "CustomerOnly")]
 
 @using System.Globalization
-@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Forms
-@using DiveHub.Application
-@using DiveHub.Domain
-@using DiveHub.Web.Services
 
 @inject IConfiguration Configuration
 @inject CustomerBookingApiClient BookingApi
@@ -20,6 +15,7 @@
     <div class="container">
 
         <div class="booking-heading">
+
             <span class="eyebrow dark">
                 PLAN YOUR EXPERIENCE
             </span>
@@ -27,9 +23,8 @@
             <h1>Book Your Experience</h1>
 
             <p>
-                Choose a diving activity or training course,
-                select your preferred date and submit
-                your reservation request.
+                Choose a diving activity or training course
+                and submit your reservation request.
             </p>
         </div>
 
@@ -57,7 +52,7 @@
 
                 @if (LoadError)
                 {
-                    <div class="notice error" role="alert">
+                    <div class="notice error">
                         Activities could not be loaded.
                         Check the API connection.
                     </div>
@@ -65,12 +60,8 @@
                 else if (Activities.Count == 0)
                 {
                     <div class="empty-state">
-                        <h3>No experiences available</h3>
-
-                        <p>
-                            No diving activities or courses
-                            are currently published.
-                        </p>
+                        <h3>No experiences available.</h3>
+                        <p>No activities or courses are available.</p>
                     </div>
                 }
                 else
@@ -82,12 +73,14 @@
                         <AntiforgeryToken />
 
                         <div class="form-field">
+
                             <label for="booking-activity">
                                 Activity or Course *
                             </label>
 
                             <select id="booking-activity"
                                     name="ActivityId"
+                                    onchange="document.getElementById('booking-participants').max = this.options[this.selectedIndex].dataset.limit || '250';"
                                     required>
 
                                 <option value="">
@@ -97,20 +90,25 @@
                                 @foreach (var activity in Activities)
                                 {
                                     <option value="@activity.Id"
+                                            data-limit="@activity.MaxParticipants"
                                             selected="@(activity.Id == SelectedActivityId)">
-                                        @activity.Name —
+
+                                        @activity.Name -
                                         @activity.Price.ToString(
-                                            "N2",
+                                            "0.00",
                                             CultureInfo.InvariantCulture)
-                                        @activity.Currency
+                                        @activity.Currency -
+                                        Max. @activity.MaxParticipants participants
+
                                     </option>
                                 }
+
                             </select>
 
                             @if (HasFieldError("activity"))
                             {
                                 <small class="booking-field-error">
-                                    Select a valid activity or course.
+                                    Select an available activity or course.
                                 </small>
                             }
                         </div>
@@ -118,37 +116,27 @@
                         @if (SelectedActivity is not null)
                         {
                             <div class="booking-selection">
-                                <strong>
-                                    @SelectedActivity.Name
-                                </strong>
+
+                                <strong>@SelectedActivity.Name</strong>
 
                                 <span>
-                                    @(SelectedActivity.Kind == ActivityKind.Course
-                                        ? "Training Course"
-                                        : "Diving Activity")
+                                    Maximum participants:
+                                    @SelectedActivity.MaxParticipants
                                 </span>
 
-                                @if (!string.IsNullOrWhiteSpace(
-                                    SelectedActivity.Description))
-                                {
-                                    <p>
-                                        @SelectedActivity.Description
-                                    </p>
-                                }
+                                <span>
+                                    @(SelectedActivity.RequiresBoat
+                                        ? "Boat required"
+                                        : "Boat optional")
+                                </span>
 
-                                <strong>
-                                    @SelectedActivity.Price.ToString(
-                                        "N2",
-                                        CultureInfo.InvariantCulture)
-                                    @SelectedActivity.Currency
-                                    / participant
-                                </strong>
                             </div>
                         }
 
                         <div class="booking-form-grid">
 
                             <div class="form-field">
+
                                 <label for="booking-date">
                                     Preferred Date *
                                 </label>
@@ -160,20 +148,19 @@
                                        required />
 
                                 <small class="reservation-help">
-                                    Book at least 2 calendar days
-                                    in advance.
+                                    Book at least two calendar days in advance.
                                 </small>
 
                                 @if (HasFieldError("date"))
                                 {
                                     <small class="booking-field-error">
-                                        Select a date at least
-                                        two days in advance.
+                                        Select a valid booking date.
                                     </small>
                                 }
                             </div>
 
                             <div class="form-field">
+
                                 <label for="booking-participants">
                                     Participants *
                                 </label>
@@ -182,7 +169,7 @@
                                        name="ParticipantCount"
                                        type="number"
                                        min="1"
-                                       max="250"
+                                       max="@(SelectedActivity?.MaxParticipants ?? ActivityCatalogRules.MaximumAllowedParticipants)"
                                        step="1"
                                        value="1"
                                        required />
@@ -190,7 +177,7 @@
                                 @if (HasFieldError("participants"))
                                 {
                                     <small class="booking-field-error">
-                                        Enter between 1 and 250 participants.
+                                        @GetParticipantError()
                                     </small>
                                 }
                             </div>
@@ -200,12 +187,12 @@
                         <h2>Your Contact Details</h2>
 
                         <p class="reservation-help">
-                            These details will be saved with your
-                            reservation so the dive center can
-                            contact you directly.
+                            Your contact details will be saved with
+                            your reservation.
                         </p>
 
                         <div class="form-field">
+
                             <label for="booking-full-name">
                                 Full Name *
                             </label>
@@ -215,7 +202,6 @@
                                    type="text"
                                    autocomplete="name"
                                    maxlength="160"
-                                   placeholder="First and last name"
                                    required />
 
                             @if (HasFieldError("name"))
@@ -227,8 +213,9 @@
                         </div>
 
                         <div class="form-field">
+
                             <label for="booking-email">
-                                Contact Email *
+                                Email Address *
                             </label>
 
                             <input id="booking-email"
@@ -236,7 +223,6 @@
                                    type="email"
                                    autocomplete="email"
                                    maxlength="254"
-                                   placeholder="name@example.com"
                                    required />
 
                             @if (HasFieldError("email"))
@@ -248,6 +234,7 @@
                         </div>
 
                         <div class="form-field">
+
                             <label for="booking-phone">
                                 Mobile Phone *
                             </label>
@@ -257,58 +244,47 @@
                                    type="tel"
                                    autocomplete="tel"
                                    maxlength="50"
-                                   placeholder="+90 5XX XXX XX XX"
+                                   placeholder="+90..."
                                    required />
-
-                            <small class="reservation-help">
-                                Include your country code.
-                                The number must contain 7–15 digits.
-                            </small>
 
                             @if (HasFieldError("phone"))
                             {
                                 <small class="booking-field-error">
-                                    Enter a valid phone number
-                                    containing 7–15 digits.
+                                    Enter a valid phone number.
                                 </small>
                             }
                         </div>
 
                         <div class="form-field">
+
                             <label for="booking-whatsapp">
-                                WhatsApp Number (Optional)
+                                WhatsApp Number
                             </label>
 
                             <input id="booking-whatsapp"
                                    name="ContactWhatsApp"
                                    type="tel"
                                    maxlength="50"
-                                   placeholder="Include country code" />
+                                   placeholder="+90..." />
 
                             @if (HasFieldError("whatsapp"))
                             {
                                 <small class="booking-field-error">
                                     Enter a valid WhatsApp number
-                                    if you select WhatsApp contact.
+                                    when WhatsApp contact is selected.
                                 </small>
                             }
                         </div>
 
-                        <fieldset class="booking-preferences">
-                            <legend>
-                                Preferred Contact Method *
-                            </legend>
+                        <fieldset class="form-field">
 
-                            <p class="reservation-help">
-                                Select at least one contact method.
-                            </p>
+                            <legend>Preferred Contact Methods *</legend>
 
                             <label>
                                 <input type="checkbox"
                                        name="ContactByEmail"
                                        value="true"
                                        checked />
-
                                 Email
                             </label>
 
@@ -316,15 +292,13 @@
                                 <input type="checkbox"
                                        name="ContactByPhone"
                                        value="true" />
-
-                                Phone Call
+                                Phone
                             </label>
 
                             <label>
                                 <input type="checkbox"
                                        name="ContactByWhatsApp"
                                        value="true" />
-
                                 WhatsApp
                             </label>
 
@@ -334,18 +308,20 @@
                                     Choose at least one contact method.
                                 </small>
                             }
+
                         </fieldset>
 
                         <div class="form-field">
+
                             <label for="booking-notes">
-                                Additional Notes (Optional)
+                                Additional Notes
                             </label>
 
                             <textarea id="booking-notes"
                                       name="CustomerNotes"
                                       maxlength="2000"
                                       rows="5"
-                                      placeholder="Experience level, special requests or useful information"></textarea>
+                                      placeholder="Experience, certification or special requests"></textarea>
 
                             @if (HasFieldError("notes"))
                             {
@@ -353,6 +329,7 @@
                                     Notes must not exceed 2000 characters.
                                 </small>
                             }
+
                         </div>
 
                         <button type="submit"
@@ -370,62 +347,52 @@
                 <h2>How Booking Works</h2>
 
                 <div class="booking-step">
+
                     <span class="booking-step-number">1</span>
 
                     <div>
                         <strong>Select Your Experience</strong>
-
-                        <p>
-                            Choose an activity, date
-                            and number of participants.
-                        </p>
+                        <p>Choose a date and participant count.</p>
                     </div>
+
                 </div>
 
                 <div class="booking-step">
+
                     <span class="booking-step-number">2</span>
 
                     <div>
                         <strong>Provide Contact Details</strong>
-
-                        <p>
-                            Enter your name, email
-                            and mobile phone number.
-                        </p>
+                        <p>Enter your name, email and phone number.</p>
                     </div>
+
                 </div>
 
                 <div class="booking-step">
+
                     <span class="booking-step-number">3</span>
 
                     <div>
                         <strong>Await Confirmation</strong>
-
-                        <p>
-                            Our team reviews availability
-                            and confirms your booking.
-                        </p>
+                        <p>Our team checks availability and confirms your booking.</p>
                     </div>
+
                 </div>
 
                 <div class="booking-info-footer">
-                    <p>
-                        Book at least two days in advance.
-                    </p>
 
-                    <p>
-                        No online payment is collected
-                        at this stage.
-                    </p>
+                    <p>No online payment is collected at this stage.</p>
 
                     <a href="/my-reservations">
                         View My Reservations
                     </a>
+
                 </div>
 
             </aside>
 
         </div>
+
     </div>
 </section>
 
@@ -450,8 +417,7 @@
         ActivityId ?? ActivityIdFromQuery ?? 0;
 
     private BookableActivityItem? SelectedActivity =>
-        Activities.FirstOrDefault(
-            x => x.Id == SelectedActivityId);
+        Activities.FirstOrDefault(x => x.Id == SelectedActivityId);
 
     private string EarliestDate =>
         BookingRules.GetEarliestDate(
@@ -469,18 +435,25 @@
                 StringComparison.OrdinalIgnoreCase);
     }
 
+    private string GetParticipantError()
+    {
+        return SelectedActivity is not null
+            ? $"Enter between 1 and {SelectedActivity.MaxParticipants} participants."
+            : "Enter a participant count within the selected activity limit.";
+    }
+
     private string GetValidationMessage()
     {
         return InvalidField switch
         {
             "activity" =>
-                "Select a valid activity or course.",
+                "Select an available activity or course.",
 
             "date" =>
                 "Select a date at least two days in advance.",
 
             "participants" =>
-                "Enter a valid participant count (1–250).",
+                GetParticipantError(),
 
             "name" =>
                 "Enter your full name.",
@@ -489,19 +462,19 @@
                 "Enter a valid email address.",
 
             "phone" =>
-                "Enter a valid mobile phone number (7–15 digits).",
+                "Enter a valid mobile number with 7-15 digits.",
 
             "whatsapp" =>
-                "Check your WhatsApp number and contact preference.",
+                "Check your WhatsApp number.",
 
             "preferences" =>
-                "Select at least one contact method.",
+                "Select at least one preferred contact method.",
 
             "notes" =>
                 "Notes must not exceed 2000 characters.",
 
             "server" =>
-                "The API rejected the booking. Check your details.",
+                "The API rejected the booking. Check activity availability and your details.",
 
             _ =>
                 "Check the required booking fields."

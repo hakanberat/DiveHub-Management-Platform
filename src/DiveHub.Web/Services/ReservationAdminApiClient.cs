@@ -1,4 +1,3 @@
-
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -31,19 +30,13 @@ public sealed record AdminReservationItem(
     string? ContactWhatsApp,
     bool ContactByEmail,
     bool ContactByPhone,
-    bool ContactByWhatsApp);
+    bool ContactByWhatsApp,
+    string? RejectionReason = null);
 
 public sealed record PendingReservationCountDto(int Count);
 
-public sealed class ReservationAdminApiClient
+public sealed class ReservationAdminApiClient(HttpClient http)
 {
-    private readonly HttpClient _http;
-
-    public ReservationAdminApiClient(HttpClient http)
-    {
-        _http = http;
-    }
-
     public async Task<int> GetPendingCountAsync(
         string accessToken,
         CancellationToken ct = default)
@@ -53,9 +46,7 @@ public sealed class ReservationAdminApiClient
             "/api/admin/reservations/pending-count",
             accessToken);
 
-        using var response = await _http.SendAsync(
-            request,
-            ct);
+        using var response = await http.SendAsync(request, ct);
 
         response.EnsureSuccessStatusCode();
 
@@ -75,9 +66,7 @@ public sealed class ReservationAdminApiClient
             "/api/admin/reservations",
             accessToken);
 
-        using var response = await _http.SendAsync(
-            request,
-            ct);
+        using var response = await http.SendAsync(request, ct);
 
         response.EnsureSuccessStatusCode();
 
@@ -104,9 +93,7 @@ public sealed class ReservationAdminApiClient
             InstructorId = instructorId
         });
 
-        using var response = await _http.SendAsync(
-            request,
-            ct);
+        using var response = await http.SendAsync(request, ct);
 
         return response.StatusCode;
     }
@@ -114,6 +101,7 @@ public sealed class ReservationAdminApiClient
     public async Task<HttpStatusCode> RejectAsync(
         string accessToken,
         long reservationId,
+        string reason,
         CancellationToken ct = default)
     {
         using var request = CreateRequest(
@@ -121,9 +109,12 @@ public sealed class ReservationAdminApiClient
             $"/api/admin/reservations/{reservationId}/reject",
             accessToken);
 
-        using var response = await _http.SendAsync(
-            request,
-            ct);
+        request.Content = JsonContent.Create(new
+        {
+            Reason = reason
+        });
+
+        using var response = await http.SendAsync(request, ct);
 
         return response.StatusCode;
     }
@@ -136,9 +127,7 @@ public sealed class ReservationAdminApiClient
         var request = new HttpRequestMessage(method, url);
 
         request.Headers.Authorization =
-            new AuthenticationHeaderValue(
-                "Bearer",
-                accessToken);
+            new AuthenticationHeaderValue("Bearer", accessToken);
 
         return request;
     }

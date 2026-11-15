@@ -1,6 +1,9 @@
 ﻿@inherits LayoutComponentBase
 
+@using Microsoft.AspNetCore.Authentication
+
 @inject IHttpContextAccessor RequestContext
+@inject CustomerBookingApiClient BookingApi
 
 <div class="app-shell">
 
@@ -26,37 +29,22 @@
                  aria-label="Main navigation">
 
                 <a href="/">Home</a>
-
-                <a href="/dive-sites">
-                    Dive Sites
-                </a>
-
-                <a href="/team">
-                    Our Team
-                </a>
-
-                <a href="/activities/diving">
-                    Diving Activities
-                </a>
-
-                <a href="/activities/courses">
-                    Courses
-                </a>
+                <a href="/dive-sites">Dive Sites</a>
+                <a href="/team">Our Team</a>
+                <a href="/activities/diving">Diving Activities</a>
+                <a href="/activities/courses">Courses</a>
 
                 @if (RequestContext.HttpContext?.User
                     .Identity?.IsAuthenticated == true)
                 {
-                    @if (RequestContext.HttpContext.User
-                        .IsInRole("Admin"))
+                    @if (RequestContext.HttpContext.User.IsInRole("Admin"))
                     {
-                        <a class="nav-admin"
-                           href="/admin">
+                        <a class="nav-admin" href="/admin">
                             Admin
                         </a>
                     }
 
-                    @if (RequestContext.HttpContext.User
-                        .IsInRole("Customer"))
+                    @if (RequestContext.HttpContext.User.IsInRole("Customer"))
                     {
                         <a href="/account">
                             My Account
@@ -66,18 +54,33 @@
                             My Reservations
                         </a>
 
-                        <a href="/book">
-                            Book
+                        <a href="/notifications"
+                           class="customer-notification-link">
+
+                            Notifications
+
+                            @if (UnreadCount > 0)
+                            {
+                                <span class="customer-notification-badge"
+                                      title="@($"{UnreadCount} unread notifications")">
+
+                                    @(UnreadCount > 99
+                                        ? "99+"
+                                        : UnreadCount.ToString())
+
+                                </span>
+                            }
+
                         </a>
+
+                        <a href="/book">Book</a>
                     }
 
-                    <form method="post"
-                          action="/account/logout">
+                    <form method="post" action="/account/logout">
 
                         <CsrfField />
 
-                        <button class="nav-logout"
-                                type="submit">
+                        <button class="nav-logout" type="submit">
                             Sign Out
                         </button>
 
@@ -85,22 +88,15 @@
                 }
                 else
                 {
-                    <a href="/customer/login">
-                        Sign In
-                    </a>
+                    <a href="/customer/login">Sign In</a>
+                    <a href="/customer/register">Register</a>
 
-                    <a href="/customer/register">
-                        Register
-                    </a>
-
-                    <a class="nav-admin"
-                       href="/login">
+                    <a class="nav-admin" href="/login">
                         Admin
                     </a>
                 }
 
             </nav>
-
         </div>
 
     </header>
@@ -113,16 +109,53 @@
 
         <div class="container footer-inner">
 
-            <span>
-                &copy; @DateTime.UtcNow.Year Dive Hub
-            </span>
+            <span>&copy; @DateTime.UtcNow.Year Dive Hub</span>
 
-            <span>
-                Dive Center Management Platform
-            </span>
+            <span>Dive Center Management Platform</span>
 
         </div>
 
     </footer>
 
 </div>
+
+@code {
+    private int UnreadCount;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        UnreadCount = 0;
+
+        var context = RequestContext.HttpContext;
+
+        if (context is null ||
+            !context.User.IsInRole("Customer"))
+        {
+            return;
+        }
+
+        var token = await context.GetTokenAsync(
+            "DiveHubWeb", "access_token");
+
+        if (string.IsNullOrWhiteSpace(token))
+            return;
+
+        try
+        {
+            UnreadCount =
+                await BookingApi.GetUnreadNotificationCountAsync(token);
+        }
+        catch (HttpRequestException)
+        {
+            UnreadCount = 0;
+        }
+        catch (TaskCanceledException)
+        {
+            UnreadCount = 0;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            UnreadCount = 0;
+        }
+    }
+}

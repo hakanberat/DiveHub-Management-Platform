@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using DiveHub.Application;
 using DiveHub.Domain;
 using DiveHub.Infrastructure;
@@ -25,6 +25,9 @@ public static class ReservationEndpoints
         int? BoatId,
         int InstructorId);
 
+    public sealed record RejectReservationRequest(
+        string? Reason);
+
     public sealed record ReservationItem(
         long Id,
         Guid CustomerUserId,
@@ -50,13 +53,14 @@ public static class ReservationEndpoints
         string? ContactWhatsApp,
         bool ContactByEmail,
         bool ContactByPhone,
-        bool ContactByWhatsApp);
+        bool ContactByWhatsApp,
+        string? RejectionReason = null);
 
     public static IEndpointRouteBuilder MapReservationEndpoints(
         this IEndpointRouteBuilder app)
     {
         var customer = app.MapGroup("/api/reservations")
-            .RequireAuthorization();
+            .RequireAuthorization("CustomerOnly");
 
         customer.MapPost("", CreateAsync);
         customer.MapGet("/mine", GetMineAsync);
@@ -69,12 +73,10 @@ public static class ReservationEndpoints
         admin.MapPost("/{id:long}/confirm", ConfirmAsync);
         admin.MapPost("/{id:long}/reject", RejectAsync);
 
+        app.MapCustomerNotificationEndpoints();
+
         return app;
     }
-
-    // ----------------------------------------------
-    // CUSTOMER: CREATE BOOKING
-    // ----------------------------------------------
 
     private static async Task<IResult> CreateAsync(
         CreateReservationRequest request,
@@ -87,7 +89,9 @@ public static class ReservationEndpoints
             return Results.Unauthorized();
 
         if (request.ActivityId <= 0 ||
-            request.ParticipantCount is < 1 or > 250)
+            request.ParticipantCount < 1 ||
+            request.ParticipantCount >
+                ActivityCatalogRules.MaximumAllowedParticipants)
         {
             return Error("Invalid activity or participant count.");
         }
@@ -120,13 +124,28 @@ public static class ReservationEndpoints
 
         var activity = await db.Activities
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                x => x.Id == request.ActivityId &&
-                     x.IsPublished,
-                ct);
+            .FirstOrDefaultAsync(x =>
+                x.Id == request.ActivityId &&
+                x.IsPublished, ct);
 
         if (activity is null)
             return Error("Activity is unavailable.");
+
+        if (!ActivityCatalogRules.HasValidCapacity(
+            activity.MaxParticipants))
+        {
+            return Error(
+                "Activity participant capacity is not configured.");
+        }
+
+        var maxParticipants =
+            activity.MaxParticipants.GetValueOrDefault();
+
+        if (request.ParticipantCount > maxParticipants)
+        {
+            return Error(
+                $"This activity allows a maximum of {maxParticipants} participants.");
+        }
 
         if (activity.Price < 0)
             return Error("Invalid activity price.");
@@ -153,14 +172,9 @@ public static class ReservationEndpoints
             ActivityDate = request.ActivityDate,
             ParticipantCount = request.ParticipantCount,
 
-            CustomerFullName =
-                request.CustomerFullName!.Trim(),
-
-            ContactEmail =
-                request.ContactEmail!.Trim(),
-
-            ContactPhone =
-                request.ContactPhone!.Trim(),
+            CustomerFullName = request.CustomerFullName!.Trim(),
+            ContactEmail = request.ContactEmail!.Trim(),
+            ContactPhone = request.ContactPhone!.Trim(),
 
             ContactWhatsApp =
                 string.IsNullOrWhiteSpace(request.ContactWhatsApp)
@@ -202,10 +216,6 @@ public static class ReservationEndpoints
             });
     }
 
-    // ----------------------------------------------
-    // CUSTOMER: LIST MY BOOKINGS
-    // ----------------------------------------------
-
     private static async Task<IResult> GetMineAsync(
         HttpContext context,
         DiveHubDbContext db,
@@ -236,25 +246,18 @@ public static class ReservationEndpoints
 
         var reservation = await db.Reservations
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                x => x.Id == id &&
-                     x.CustomerUserId == customerId,
-                ct);
+            .FirstOrDefaultAsync(x =>
+                x.Id == id &&
+                x.CustomerUserId == customerId, ct);
 
         if (reservation is null)
             return Results.NotFound();
 
         var items = await BuildItemsAsync(
-            db,
-            [reservation],
-            ct);
+            db, [reservation], ct);
 
         return Results.Ok(items[0]);
     }
-
-    // ----------------------------------------------
-    // ADMIN: LIST RESERVATIONS
-    // ----------------------------------------------
 
     private static async Task<IResult> GetAdminListAsync(
         DiveHubDbContext db,
@@ -262,13 +265,10 @@ public static class ReservationEndpoints
     {
         var reservations = await db.Reservations
             .AsNoTracking()
-
-            // Pending bookings first, newest first.
             .OrderBy(x =>
                 x.Status == ReservationStatus.Pending ? 0 : 1)
             .ThenByDescending(x => x.CreatedAtUtc)
             .ThenByDescending(x => x.Id)
-
             .Take(200)
             .ToListAsync(ct);
 
@@ -276,21 +276,18 @@ public static class ReservationEndpoints
             await BuildItemsAsync(db, reservations, ct));
     }
 
-    // ----------------------------------------------
-    // ADMIN: CONFIRM RESERVATION
-    // ----------------------------------------------
-
     private static async Task<IResult> ConfirmAsync(
         long id,
         ConfirmReservationRequest request,
         DiveHubDbContext db,
+        IConfiguration configuration,
         CancellationToken ct)
     {
         if (id <= 0 ||
             request.InstructorId <= 0 ||
             request.BoatId is <= 0)
         {
-            return Error("Invalid assignment.");
+            return Error("Invalid instructor or boat assignment.");
         }
 
         var reservation = await db.Reservations
@@ -305,60 +302,67 @@ public static class ReservationEndpoints
                 "Only pending reservations can be confirmed.");
         }
 
-        // Never trust the HTML dropdown for boat requirements.
-        // This rule is checked using the current activity configuration.
         var activity = await db.Activities
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                x => x.Id == reservation.ActivityId,
-                ct);
+                x => x.Id == reservation.ActivityId, ct);
 
         if (activity is null)
             return Results.NotFound();
 
+        if (!ActivityCatalogRules.HasValidCapacity(
+            activity.MaxParticipants))
+        {
+            return Error(
+                "Activity participant capacity is not configured.");
+        }
+
+        var maxParticipants =
+            activity.MaxParticipants.GetValueOrDefault();
+
+        if (reservation.ParticipantCount < 1 ||
+            reservation.ParticipantCount > maxParticipants)
+        {
+            return Error(
+                $"Participant count exceeds the activity limit of {maxParticipants}.");
+        }
+
         if (activity.RequiresBoat && request.BoatId is null)
             return Error("This activity requires an assigned boat.");
 
-        // Existing past-date protection.
-        if (reservation.ActivityDate <
-            DateOnly.FromDateTime(DateTime.UtcNow))
-        {
+        var localToday = BookingRules.GetEarliestDate(
+                configuration["DiveCenter:TimeZoneId"])
+            .AddDays(-BookingRules.MinimumAdvanceDays);
+
+        if (reservation.ActivityDate < localToday)
             return Error("Past reservations cannot be confirmed.");
-        }
 
         var instructor = await db.StaffMembers
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                x => x.Id == request.InstructorId &&
-                     x.IsActive,
-                ct);
+            .FirstOrDefaultAsync(x =>
+                x.Id == request.InstructorId &&
+                x.IsActive, ct);
 
         if (instructor is null)
             return Error("Instructor is unavailable.");
 
         var instructorOccupied = await db.Reservations
-            .AnyAsync(
-                x => x.Id != id &&
-                     x.ActivityDate == reservation.ActivityDate &&
-                     x.InstructorId == request.InstructorId &&
-                     (x.Status == ReservationStatus.Confirmed ||
-                      x.Status == ReservationStatus.Completed),
-                ct);
+            .AnyAsync(x =>
+                x.Id != id &&
+                x.ActivityDate == reservation.ActivityDate &&
+                x.InstructorId == request.InstructorId &&
+                (x.Status == ReservationStatus.Confirmed ||
+                 x.Status == ReservationStatus.Completed), ct);
 
         if (instructorOccupied)
-        {
-            return Conflict(
-                "Instructor already assigned on this date.");
-        }
+            return Conflict("Instructor already assigned on this date.");
 
         if (request.BoatId is int boatId)
         {
             var boat = await db.Boats
                 .AsNoTracking()
-                .FirstOrDefaultAsync(
-                    x => x.Id == boatId &&
-                         x.IsActive,
-                    ct);
+                .FirstOrDefaultAsync(x =>
+                    x.Id == boatId && x.IsActive, ct);
 
             if (boat is null)
                 return Error("Boat is unavailable.");
@@ -366,28 +370,35 @@ public static class ReservationEndpoints
             if (reservation.ParticipantCount > boat.Capacity)
             {
                 return Error(
-                    "Participant count exceeds boat capacity.");
+                    $"Participant count exceeds boat capacity of {boat.Capacity}.");
             }
 
             var boatOccupied = await db.Reservations
-                .AnyAsync(
-                    x => x.Id != id &&
-                         x.ActivityDate == reservation.ActivityDate &&
-                         x.BoatId == boatId &&
-                         (x.Status == ReservationStatus.Confirmed ||
-                          x.Status == ReservationStatus.Completed),
-                    ct);
+                .AnyAsync(x =>
+                    x.Id != id &&
+                    x.ActivityDate == reservation.ActivityDate &&
+                    x.BoatId == boatId &&
+                    (x.Status == ReservationStatus.Confirmed ||
+                     x.Status == ReservationStatus.Completed), ct);
 
             if (boatOccupied)
-            {
-                return Conflict(
-                    "Boat already assigned on this date.");
-            }
+                return Conflict("Boat already assigned on this date.");
         }
 
         reservation.BoatId = request.BoatId;
         reservation.InstructorId = request.InstructorId;
         reservation.Status = ReservationStatus.Confirmed;
+
+        db.CustomerNotifications.Add(new CustomerNotification
+        {
+            CustomerUserId = reservation.CustomerUserId,
+            ReservationId = reservation.Id,
+            Kind = CustomerNotificationKind.ReservationConfirmed,
+            Title = $"Booking #{reservation.Id} confirmed",
+            Message =
+                $"Your reservation for {activity.Name} on " +
+                $"{reservation.ActivityDate:yyyy-MM-dd} has been confirmed."
+        });
 
         try
         {
@@ -396,7 +407,7 @@ public static class ReservationEndpoints
         catch (DbUpdateException)
         {
             return Conflict(
-                "Assignment conflict. Refresh and retry.");
+                "The reservation or assignment has changed. Refresh and retry.");
         }
 
         return Results.Ok(new
@@ -408,19 +419,24 @@ public static class ReservationEndpoints
         });
     }
 
-    // ----------------------------------------------
-    // ADMIN: REJECT RESERVATION
-    // ----------------------------------------------
-
     private static async Task<IResult> RejectAsync(
         long id,
+        RejectReservationRequest request,
         DiveHubDbContext db,
         CancellationToken ct)
     {
+        var reason = request.Reason?.Trim() ?? "";
+
+        if (id <= 0 ||
+            reason.Length < 1 ||
+            reason.Length > 1000)
+        {
+            return Error(
+                "A rejection reason is required (maximum 1000 characters).");
+        }
+
         var reservation = await db.Reservations
-            .FirstOrDefaultAsync(
-                x => x.Id == id,
-                ct);
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
 
         if (reservation is null)
             return Results.NotFound();
@@ -433,14 +449,30 @@ public static class ReservationEndpoints
 
         reservation.Status = ReservationStatus.Rejected;
 
-        await db.SaveChangesAsync(ct);
+        reservation.BoatId = null;
+        reservation.InstructorId = null;
+
+        db.CustomerNotifications.Add(new CustomerNotification
+        {
+            CustomerUserId = reservation.CustomerUserId,
+            ReservationId = reservation.Id,
+            Kind = CustomerNotificationKind.ReservationRejected,
+            Title = $"Booking #{reservation.Id} rejected",
+            Message = reason
+        });
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict(
+                "The reservation has changed. Refresh and retry.");
+        }
 
         return Results.NoContent();
     }
-
-    // ----------------------------------------------
-    // SHARED RESERVATION DTO MAPPING
-    // ----------------------------------------------
 
     private static async Task<ReservationItem[]> BuildItemsAsync(
         DiveHubDbContext db,
@@ -472,36 +504,39 @@ public static class ReservationEndpoints
             .Distinct()
             .ToArray();
 
+        var reservationIds = reservations
+            .Select(x => x.Id)
+            .ToArray();
+
         var activities = await db.Activities
             .AsNoTracking()
             .Where(x => activityIds.Contains(x.Id))
-            .ToDictionaryAsync(
-                x => x.Id,
-                x => x.Name,
-                ct);
+            .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
 
         var boats = await db.Boats
             .AsNoTracking()
             .Where(x => boatIds.Contains(x.Id))
-            .ToDictionaryAsync(
-                x => x.Id,
-                x => x.Name,
-                ct);
+            .ToDictionaryAsync(x => x.Id, x => x.Name, ct);
 
         var instructors = await db.StaffMembers
             .AsNoTracking()
             .Where(x => instructorIds.Contains(x.Id))
-            .ToDictionaryAsync(
-                x => x.Id,
-                x => x.FullName,
-                ct);
+            .ToDictionaryAsync(x => x.Id, x => x.FullName, ct);
 
         var customers = await db.Users
             .AsNoTracking()
             .Where(x => customerIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => x.Email, ct);
+
+        var reasons = await db.CustomerNotifications
+            .AsNoTracking()
+            .Where(x =>
+                x.Kind == CustomerNotificationKind.ReservationRejected &&
+                x.ReservationId.HasValue &&
+                reservationIds.Contains(x.ReservationId.Value))
             .ToDictionaryAsync(
-                x => x.Id,
-                x => x.Email,
+                x => x.ReservationId!.Value,
+                x => x.Message,
                 ct);
 
         return reservations.Select(x => new ReservationItem(
@@ -534,7 +569,8 @@ public static class ReservationEndpoints
             x.ContactWhatsApp,
             x.ContactByEmail,
             x.ContactByPhone,
-            x.ContactByWhatsApp
+            x.ContactByWhatsApp,
+            reasons.GetValueOrDefault(x.Id)
         )).ToArray();
     }
 

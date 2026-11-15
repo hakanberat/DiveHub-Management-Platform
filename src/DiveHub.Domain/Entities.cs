@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 
 namespace DiveHub.Domain;
 
@@ -53,15 +54,57 @@ public sealed class DiveSite
 public sealed class Activity
 {
     public int Id { get; set; }
-    public string Name { get; set; } = "";
-    public string Description { get; set; } = "";
-    public ActivityKind Kind { get; set; }
-    public decimal Price { get; set; }
-    public string Currency { get; set; } = "EUR";
-    public bool IsPublished { get; set; }
 
-    // Boat is mandatory when confirming this activity.
-    public bool RequiresBoat { get; set; } = false;
+    public string Name { get; set; } = "";
+
+    [MaxLength(300)]
+    public string ShortDescription { get; set; } = "";
+
+    public string Description { get; set; } = "";
+
+    public ActivityKind Kind { get; set; }
+
+    [MaxLength(100)]
+    public string Category { get; set; } = "";
+
+    [MaxLength(100)]
+    public string Country { get; set; } = "";
+
+    [MaxLength(100)]
+    public string City { get; set; } = "";
+
+    [MaxLength(250)]
+    public string Location { get; set; } = "";
+
+    [MaxLength(2000)]
+    public string MapLocation { get; set; } = "";
+
+    public decimal Price { get; set; }
+
+    public string Currency { get; set; } = "EUR";
+
+    [MaxLength(100)]
+    public string Duration { get; set; } = "";
+
+    public int? MinimumAge { get; set; }
+
+    [MaxLength(200)]
+    public string MinimumCertification { get; set; } = "";
+
+    public int? MaxParticipants { get; set; }
+
+    [MaxLength(2000)]
+    public string Included { get; set; } = "";
+
+    [MaxLength(2000)]
+    public string NotIncluded { get; set; } = "";
+
+    [MaxLength(2000)]
+    public string Requirements { get; set; } = "";
+
+    public bool RequiresBoat { get; set; }
+
+    public bool IsPublished { get; set; }
 }
 
 public sealed class Boat
@@ -87,10 +130,9 @@ public sealed class StaffMember
 public sealed class Reservation
 {
     public long Id { get; set; }
+
     public Guid CustomerUserId { get; set; }
 
-    // Contact snapshot captured at reservation time.
-    // Nullable to preserve existing reservations.
     public string? CustomerFullName { get; set; }
     public string? ContactEmail { get; set; }
     public string? ContactPhone { get; set; }
@@ -102,10 +144,10 @@ public sealed class Reservation
 
     public int ActivityId { get; set; }
 
-    // Daily reservation without time slots.
     public DateOnly ActivityDate { get; set; }
 
     public int ParticipantCount { get; set; }
+
     public int? BoatId { get; set; }
     public int? InstructorId { get; set; }
 
@@ -115,9 +157,9 @@ public sealed class Reservation
     public PaymentStatus PaymentStatus { get; set; }
         = PaymentStatus.Unpaid;
 
-    // Price snapshot at the time of booking.
     public decimal UnitPrice { get; set; }
     public decimal TotalPrice { get; set; }
+
     public string Currency { get; set; } = "EUR";
 
     public string CustomerNotes { get; set; } = "";
@@ -138,6 +180,7 @@ public sealed class DiveEvent
 public sealed class MediaAsset
 {
     public long Id { get; set; }
+
     public string FileName { get; set; } = "";
     public string RelativePath { get; set; } = "";
     public string AltText { get; set; } = "";

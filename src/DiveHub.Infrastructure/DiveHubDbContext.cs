@@ -18,6 +18,9 @@ public sealed class DiveHubDbContext(
     public DbSet<DiveEvent> DiveEvents => Set<DiveEvent>();
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
 
+    public DbSet<CustomerNotification> CustomerNotifications =>
+        Set<CustomerNotification>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -83,6 +86,9 @@ public sealed class DiveHubDbContext(
         modelBuilder.Entity<Reservation>(b =>
         {
             b.Property(x => x.ActivityDate).HasColumnType("date");
+
+            b.Property(x => x.Status).IsConcurrencyToken();
+
             b.Property(x => x.Currency).HasMaxLength(3);
             b.Property(x => x.UnitPrice).HasPrecision(18, 2);
             b.Property(x => x.TotalPrice).HasPrecision(18, 2);
@@ -113,17 +119,51 @@ public sealed class DiveHubDbContext(
                 .HasForeignKey(x => x.InstructorId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Bir tekne: bir gunde tek onayli operasyon.
             b.HasIndex(x => new { x.BoatId, x.ActivityDate })
                 .IsUnique()
                 .HasFilter(
                     "[BoatId] IS NOT NULL AND [Status] IN (1, 2)");
 
-            // Bir egitmen: bir gunde tek onayli gorev.
             b.HasIndex(x => new { x.InstructorId, x.ActivityDate })
                 .IsUnique()
                 .HasFilter(
                     "[InstructorId] IS NOT NULL AND [Status] IN (1, 2)");
+        });
+
+        modelBuilder.Entity<CustomerNotification>(b =>
+        {
+            b.Property(x => x.Title)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            b.Property(x => x.Message)
+                .HasMaxLength(2000)
+                .IsRequired();
+
+            b.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(x => x.CustomerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasOne<Reservation>()
+                .WithMany()
+                .HasForeignKey(x => x.ReservationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasIndex(x => new
+            {
+                x.CustomerUserId,
+                x.ReadAtUtc,
+                x.CreatedAtUtc
+            });
+
+            b.HasIndex(x => new
+            {
+                x.ReservationId,
+                x.Kind
+            })
+            .IsUnique()
+            .HasFilter("[ReservationId] IS NOT NULL");
         });
 
         modelBuilder.Entity<DiveEvent>(b =>
@@ -143,26 +183,20 @@ public sealed class DiveHubDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.DiveSiteId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasOne<Activity>()
+                .WithMany()
+                .HasForeignKey(x => x.ActivityId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasOne<StaffMember>()
+                .WithMany()
+                .HasForeignKey(x => x.StaffMemberId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasIndex(x => x.StaffMemberId)
+                .IsUnique()
+                .HasFilter("[StaffMemberId] IS NOT NULL");
         });
-
-        modelBuilder.Entity<MediaAsset>()
-            .HasOne<Activity>()
-            .WithMany()
-            .HasForeignKey(x => x.ActivityId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-
-         
-        modelBuilder.Entity<MediaAsset>()
-            .HasOne<StaffMember>()
-            .WithMany()
-            .HasForeignKey(x => x.StaffMemberId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<MediaAsset>()
-            .HasIndex(x => x.StaffMemberId)
-            .IsUnique()
-            .HasFilter("[StaffMemberId] IS NOT NULL");
-   
     }
 }

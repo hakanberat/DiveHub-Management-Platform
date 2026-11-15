@@ -13,9 +13,6 @@ public static class AdminActivityCatalogWebEndpoints
     public static IEndpointRouteBuilder MapAdminActivityCatalogWebEndpoints(
         this IEndpointRouteBuilder app)
     {
-        // Keep existing POST addresses.
-        // Only the destination after saving changes.
-
         var group = app.MapGroup("/admin/activity-catalog")
             .RequireAuthorization("AdminOnly");
 
@@ -98,7 +95,6 @@ public static class AdminActivityCatalogWebEndpoints
 
         var form = await context.Request.ReadFormAsync();
 
-        // Only these two destinations are allowed.
         var returnPage = GetReturnPage(form);
 
         var token = await context.GetTokenAsync(
@@ -155,29 +151,15 @@ public static class AdminActivityCatalogWebEndpoints
         data = new SaveActivityCatalogRequest(
             "", "", ActivityKind.Dive, 0, "EUR");
 
-        var name = form["Name"].ToString().Trim();
-        var description = form["Description"].ToString().Trim();
-        var kindText = form["Kind"].ToString();
-        var currency = form["Currency"].ToString()
-            .Trim().ToUpperInvariant();
-        var priceText = form["Price"].ToString();
-
-        if (string.IsNullOrWhiteSpace(name) ||
-            name.Length > 120 ||
-            description.Length > 1000)
-        {
-            return false;
-        }
-
         if (!Enum.TryParse<ActivityKind>(
-            kindText, true, out var kind) ||
+            Read(form, "Kind"), true, out var kind) ||
             !Enum.IsDefined(kind))
         {
             return false;
         }
 
         if (!decimal.TryParse(
-            priceText,
+            Read(form, "Price"),
             NumberStyles.AllowDecimalPoint,
             CultureInfo.InvariantCulture,
             out var price))
@@ -185,20 +167,68 @@ public static class AdminActivityCatalogWebEndpoints
             return false;
         }
 
-        if (price < 0 || price > 999999.99m)
+        if (!int.TryParse(
+            Read(form, "MaxParticipants"),
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out var maxParticipants))
+        {
             return false;
+        }
 
-        if (currency.Length != 3 ||
-            currency.Any(c => c < 'A' || c > 'Z'))
+        int? minimumAge = null;
+
+        var minimumAgeText = Read(form, "MinimumAge");
+
+        if (!string.IsNullOrWhiteSpace(minimumAgeText))
+        {
+            if (!int.TryParse(
+                minimumAgeText,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var parsedAge))
+            {
+                return false;
+            }
+
+            minimumAge = parsedAge;
+        }
+
+        if (!bool.TryParse(
+            Read(form, "RequiresBoat"),
+            out var requiresBoat))
+        {
             return false;
+        }
 
         data = new SaveActivityCatalogRequest(
-            name,
-            description,
-            kind,
-            price,
-            currency);
+            Name: Read(form, "Name"),
+            Description: Read(form, "Description"),
+            Kind: kind,
+            Price: price,
+            Currency: Read(form, "Currency").ToUpperInvariant(),
+            ShortDescription: Read(form, "ShortDescription"),
+            Category: Read(form, "Category"),
+            Country: Read(form, "Country"),
+            City: Read(form, "City"),
+            Location: Read(form, "Location"),
+            MapLocation: Read(form, "MapLocation"),
+            Duration: Read(form, "Duration"),
+            MinimumAge: minimumAge,
+            MinimumCertification: Read(form, "MinimumCertification"),
+            MaxParticipants: maxParticipants,
+            Included: Read(form, "Included"),
+            NotIncluded: Read(form, "NotIncluded"),
+            Requirements: Read(form, "Requirements"),
+            RequiresBoat: requiresBoat);
 
-        return true;
+        return ActivityCatalogRules.IsValid(data);
+    }
+
+    private static string Read(
+        IFormCollection form,
+        string field)
+    {
+        return form[field].ToString().Trim();
     }
 }

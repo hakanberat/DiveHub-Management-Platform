@@ -1,4 +1,3 @@
-
 using System.Globalization;
 using System.Net;
 using DiveHub.Web.Services;
@@ -28,20 +27,17 @@ public static class AdminReservationWebEndpoints
         ReservationAdminApiClient api,
         CancellationToken ct)
     {
-        if (!await antiforgery.IsRequestValidAsync(context))
-            return Results.BadRequest("Invalid security token.");
-
-        if (!context.Request.HasFormContentType)
-            return Results.BadRequest("Invalid form.");
+        if (!context.Request.HasFormContentType ||
+            !await antiforgery.IsRequestValidAsync(context))
+        {
+            return Results.BadRequest("Invalid form or security token.");
+        }
 
         var form = await context.Request.ReadFormAsync(ct);
 
-        var instructorText = form["InstructorId"].ToString();
-        var boatText = form["BoatId"].ToString();
-
         if (id <= 0 ||
             !int.TryParse(
-                instructorText,
+                form["InstructorId"].ToString(),
                 NumberStyles.None,
                 CultureInfo.InvariantCulture,
                 out var instructorId) ||
@@ -51,6 +47,8 @@ public static class AdminReservationWebEndpoints
         }
 
         int? boatId = null;
+
+        var boatText = form["BoatId"].ToString();
 
         if (!string.IsNullOrWhiteSpace(boatText))
         {
@@ -68,8 +66,7 @@ public static class AdminReservationWebEndpoints
         }
 
         var token = await context.GetTokenAsync(
-            "DiveHubWeb",
-            "access_token");
+            "DiveHubWeb", "access_token");
 
         if (string.IsNullOrWhiteSpace(token))
             return Results.Redirect("/login?error=expired");
@@ -77,20 +74,13 @@ public static class AdminReservationWebEndpoints
         try
         {
             var status = await api.ConfirmAsync(
-                token,
-                id,
-                boatId,
-                instructorId,
-                ct);
+                token, id, boatId, instructorId, ct);
 
             return status switch
             {
                 HttpStatusCode.OK => Redirect("confirmed"),
-
                 HttpStatusCode.Conflict => Redirect("conflict"),
-
                 HttpStatusCode.BadRequest => Redirect("invalid"),
-
                 HttpStatusCode.NotFound => Redirect("notfound"),
 
                 HttpStatusCode.Unauthorized or
@@ -104,7 +94,8 @@ public static class AdminReservationWebEndpoints
         {
             return Redirect("error");
         }
-        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        catch (TaskCanceledException)
+            when (!ct.IsCancellationRequested)
         {
             return Redirect("error");
         }
@@ -117,15 +108,25 @@ public static class AdminReservationWebEndpoints
         ReservationAdminApiClient api,
         CancellationToken ct)
     {
-        if (!await antiforgery.IsRequestValidAsync(context))
-            return Results.BadRequest("Invalid security token.");
+        if (!context.Request.HasFormContentType ||
+            !await antiforgery.IsRequestValidAsync(context))
+        {
+            return Results.BadRequest("Invalid form or security token.");
+        }
 
-        if (id <= 0)
-            return Redirect("invalid");
+        var form = await context.Request.ReadFormAsync(ct);
+
+        var reason = form["Reason"].ToString().Trim();
+
+        if (id <= 0 ||
+            reason.Length < 1 ||
+            reason.Length > 1000)
+        {
+            return Redirect("invalid-reason");
+        }
 
         var token = await context.GetTokenAsync(
-            "DiveHubWeb",
-            "access_token");
+            "DiveHubWeb", "access_token");
 
         if (string.IsNullOrWhiteSpace(token))
             return Results.Redirect("/login?error=expired");
@@ -133,16 +134,13 @@ public static class AdminReservationWebEndpoints
         try
         {
             var status = await api.RejectAsync(
-                token,
-                id,
-                ct);
+                token, id, reason, ct);
 
             return status switch
             {
                 HttpStatusCode.NoContent => Redirect("rejected"),
-
                 HttpStatusCode.Conflict => Redirect("conflict"),
-
+                HttpStatusCode.BadRequest => Redirect("invalid-reason"),
                 HttpStatusCode.NotFound => Redirect("notfound"),
 
                 HttpStatusCode.Unauthorized or
@@ -156,7 +154,8 @@ public static class AdminReservationWebEndpoints
         {
             return Redirect("error");
         }
-        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        catch (TaskCanceledException)
+            when (!ct.IsCancellationRequested)
         {
             return Redirect("error");
         }

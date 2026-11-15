@@ -1,19 +1,37 @@
-
 @inject ActivityPhotoApiClient Api
 
-@if (Photos.Count > 0)
+@if (LoadError)
 {
-    <div class="dive-photo-grid">
+    <div class="activity-gallery-empty" role="alert">
+        Photos could not be loaded.
+    </div>
+}
+else if (Photos.Count == 0)
+{
+    <div class="activity-gallery-empty">
+        No photo available
+    </div>
+}
+else
+{
+    <div class="activity-gallery">
 
         @foreach (var photo in Photos)
         {
-            <img class="dive-photo"
+            <img @key="photo.Id"
                  src="@($"/media/activities/{ActivityId}/{photo.Id}")"
                  alt="@photo.AltText"
                  loading="lazy" />
         }
 
     </div>
+
+    @if (Photos.Count > 1)
+    {
+        <p class="activity-gallery-hint">
+            Scroll to view all @Photos.Count photos.
+        </p>
+    }
 }
 
 @code {
@@ -22,19 +40,31 @@
 
     private IReadOnlyList<ActivityPhotoDto> Photos = [];
 
-    protected override async Task OnInitializedAsync()
+    private bool LoadError;
+
+    protected override async Task OnParametersSetAsync()
     {
+        Photos = [];
+        LoadError = false;
+
+        if (ActivityId <= 0)
+            return;
+
         try
         {
             Photos = await Api.GetPublicAsync(ActivityId);
         }
         catch (HttpRequestException)
         {
-            Photos = [];
+            LoadError = true;
         }
         catch (TaskCanceledException)
         {
-            Photos = [];
+            LoadError = true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            LoadError = true;
         }
     }
 }

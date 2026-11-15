@@ -1,13 +1,9 @@
-
 @page "/my-reservations"
 
-@attribute [Authorize]
+@attribute [Authorize(Policy = "CustomerOnly")]
 
 @using System.Globalization
-@using DiveHub.Domain
-@using DiveHub.Web.Services
 @using Microsoft.AspNetCore.Authentication
-@using Microsoft.AspNetCore.Authorization
 
 @inject IHttpContextAccessor RequestContext
 @inject CustomerBookingApiClient BookingApi
@@ -18,20 +14,19 @@
     <div class="container">
 
         <div class="booking-heading">
-            <span class="eyebrow dark">
-                CUSTOMER ACCOUNT
-            </span>
+
+            <span class="eyebrow dark">CUSTOMER ACCOUNT</span>
 
             <h1>My Reservations</h1>
 
             <p>
-                Track your diving activities,
-                training courses and booking status.
+                Track your diving activities, courses and booking status.
             </p>
 
             <a href="/book" class="btn btn-primary">
                 New Booking
             </a>
+
         </div>
 
         @if (Status == "created")
@@ -46,24 +41,26 @@
         {
             <div class="notice error">
                 Your reservations could not be loaded.
-                Check your session or API connection.
             </div>
         }
         else if (Reservations.Count == 0)
         {
             <div class="booking-card">
+
                 <div class="empty-state">
-                    <h2>No reservations yet</h2>
+
+                    <h2>No reservations yet.</h2>
 
                     <p>
-                        You have not submitted any
-                        diving or training requests.
+                        You have not submitted any booking requests.
                     </p>
 
                     <a href="/book" class="btn btn-primary">
                         Book Your First Experience
                     </a>
+
                 </div>
+
             </div>
         }
         else
@@ -72,10 +69,14 @@
 
                 @foreach (var reservation in Reservations)
                 {
-                    <article class="reservation-card">
+                    <article class="reservation-card"
+                             id="@($"reservation-{reservation.Id}")"
+                             @key="reservation.Id">
 
                         <div class="reservation-card-header">
+
                             <div>
+
                                 <span class="reservation-number">
                                     Booking #@reservation.Id
                                 </span>
@@ -89,11 +90,13 @@
                                         CultureInfo.InvariantCulture)
                                     (UTC)
                                 </p>
+
                             </div>
 
                             <span class="@GetStatusClass(reservation.Status)">
                                 @reservation.Status
                             </span>
+
                         </div>
 
                         <div class="reservation-details">
@@ -110,10 +113,7 @@
 
                             <div>
                                 <span>Participants</span>
-
-                                <strong>
-                                    @reservation.ParticipantCount
-                                </strong>
+                                <strong>@reservation.ParticipantCount</strong>
                             </div>
 
                             <div>
@@ -129,47 +129,65 @@
 
                             <div>
                                 <span>Payment</span>
-
-                                <strong>
-                                    @reservation.PaymentStatus
-                                </strong>
+                                <strong>@reservation.PaymentStatus</strong>
                             </div>
 
                         </div>
 
-                        @if (!string.IsNullOrWhiteSpace(
-                            reservation.CustomerNotes))
+                        @if (!string.IsNullOrWhiteSpace(reservation.CustomerNotes))
                         {
                             <div class="reservation-notes">
+
                                 <strong>Your Notes</strong>
-                                <p>@reservation.CustomerNotes</p>
+
+                                <p style="white-space: pre-wrap;">
+                                    @reservation.CustomerNotes
+                                </p>
+
                             </div>
                         }
 
                         @if (reservation.Status == ReservationStatus.Pending)
                         {
                             <div class="booking-state-message">
+
                                 <strong>Awaiting Confirmation</strong>
+
                                 <p>
-                                    Your request is under review.
-                                    Our team will confirm
-                                    resource availability.
+                                    Our team is reviewing your request
+                                    and checking availability.
                                 </p>
+
                             </div>
                         }
-                        else if (reservation.Status ==
-                            ReservationStatus.Confirmed)
+                        else if (reservation.Status == ReservationStatus.Confirmed)
                         {
-                            <div class="booking-state-message">
+                            <div class="notice success">
+
                                 <strong>Booking Confirmed</strong>
 
                                 <p>
                                     Your reservation has been confirmed.
                                 </p>
+
+                            </div>
+                        }
+                        else if (reservation.Status == ReservationStatus.Rejected)
+                        {
+                            <div class="notice error">
+
+                                <strong>Booking Rejected</strong>
+
+                                <p style="white-space: pre-wrap;">
+                                    @(reservation.RejectionReason
+                                        ?? "No explanation was recorded for this reservation.")
+                                </p>
+
                             </div>
                         }
 
                         <div class="reservation-assignments">
+
                             <span>
                                 Boat:
                                 @(reservation.BoatName ?? "Not assigned")
@@ -179,6 +197,7 @@
                                 Instructor:
                                 @(reservation.InstructorName ?? "Not assigned")
                             </span>
+
                         </div>
 
                     </article>
@@ -212,8 +231,7 @@
         }
 
         var token = await context.GetTokenAsync(
-            "DiveHubWeb",
-            "access_token");
+            "DiveHubWeb", "access_token");
 
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -233,10 +251,13 @@
         {
             LoadError = true;
         }
+        catch (System.Text.Json.JsonException)
+        {
+            LoadError = true;
+        }
     }
 
-    private static string GetStatusClass(
-        ReservationStatus status)
+    private static string GetStatusClass(ReservationStatus status)
     {
         return "reservation-status status-" +
             status.ToString().ToLowerInvariant();

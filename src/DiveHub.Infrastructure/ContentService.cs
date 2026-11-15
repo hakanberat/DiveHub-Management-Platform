@@ -1,4 +1,3 @@
-
 using DiveHub.Application;
 using DiveHub.Domain;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +17,8 @@ public sealed class ContentService(DiveHubDbContext db)
     public async Task<SiteSettings> UpdateSiteAsync(
         UpdateSiteRequest request)
     {
-        var site = await db.SiteSettings.SingleAsync(x => x.Id == 1);
+        var site = await db.SiteSettings
+            .SingleAsync(x => x.Id == 1);
 
         site.Name = request.Name.Trim();
         site.Description = request.Description.Trim();
@@ -28,6 +28,7 @@ public sealed class ContentService(DiveHubDbContext db)
         site.WhatsApp = request.WhatsApp.Trim();
 
         await db.SaveChangesAsync();
+
         return site;
     }
 
@@ -39,7 +40,9 @@ public sealed class ContentService(DiveHubDbContext db)
         if (!includeUnpublished)
             query = query.Where(x => x.IsPublished);
 
-        return await query.OrderBy(x => x.Name).ToListAsync();
+        return await query
+            .OrderBy(x => x.Name)
+            .ToListAsync();
     }
 
     public async Task<DiveSite> CreateDiveSiteAsync(
@@ -54,6 +57,7 @@ public sealed class ContentService(DiveHubDbContext db)
         };
 
         db.DiveSites.Add(site);
+
         await db.SaveChangesAsync();
 
         return site;
@@ -65,9 +69,17 @@ public sealed class ContentService(DiveHubDbContext db)
         var query = db.Activities.AsNoTracking();
 
         if (!includeUnpublished)
-            query = query.Where(x => x.IsPublished);
+        {
+            query = query.Where(x =>
+                x.IsPublished &&
+                x.MaxParticipants >= 1 &&
+                x.MaxParticipants <=
+                    ActivityCatalogRules.MaximumAllowedParticipants);
+        }
 
-        return await query.OrderBy(x => x.Name).ToListAsync();
+        return await query
+            .OrderBy(x => x.Name)
+            .ToListAsync();
     }
 
     public async Task<Activity> CreateActivityAsync(
@@ -84,6 +96,7 @@ public sealed class ContentService(DiveHubDbContext db)
         };
 
         db.Activities.Add(activity);
+
         await db.SaveChangesAsync();
 
         return activity;

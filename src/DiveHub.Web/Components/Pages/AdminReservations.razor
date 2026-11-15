@@ -3,10 +3,7 @@
 @attribute [Authorize(Roles = "Admin")]
 
 @using System.Globalization
-@using DiveHub.Domain
-@using DiveHub.Web.Services
 @using Microsoft.AspNetCore.Authentication
-@using Microsoft.AspNetCore.Authorization
 
 @inject IHttpContextAccessor RequestContext
 @inject ReservationAdminApiClient ReservationApi
@@ -21,16 +18,11 @@
 
         <div class="admin-heading">
             <div>
-                <span class="eyebrow dark">
-                    OPERATIONS MANAGEMENT
-                </span>
+                <span class="eyebrow dark">OPERATIONS MANAGEMENT</span>
 
                 <h1>Reservations</h1>
 
-                <p>
-                    Review customer bookings, contact divers
-                    and manage approvals.
-                </p>
+                <p>Review bookings and manage approvals.</p>
             </div>
 
             <a href="/admin" class="btn btn-secondary">
@@ -41,35 +33,37 @@
         @if (Status == "confirmed")
         {
             <div class="notice success">
-                Reservation confirmed successfully.
+                Reservation confirmed. Customer notified.
             </div>
         }
         else if (Status == "rejected")
         {
             <div class="notice success">
-                Reservation rejected successfully.
+                Reservation rejected. Customer notified with the reason.
             </div>
         }
         else if (Status == "conflict")
         {
             <div class="notice error">
-                Reservation cannot be confirmed.
-                The selected boat or instructor may already
-                be assigned to another reservation.
+                The reservation or resource availability has changed.
+                Refresh and retry.
+            </div>
+        }
+        else if (Status == "invalid-reason")
+        {
+            <div class="notice error">
+                Please enter a rejection reason of 1-1000 characters.
             </div>
         }
         else if (Status == "invalid")
         {
             <div class="notice error">
-                Invalid assignment. Check the instructor,
-                boat and participant capacity.
+                Check instructor, boat and participant capacity.
             </div>
         }
         else if (Status == "notfound")
         {
-            <div class="notice error">
-                Reservation not found.
-            </div>
+            <div class="notice error">Reservation not found.</div>
         }
         else if (Status == "error")
         {
@@ -87,9 +81,8 @@
                 @if (LoadError)
                 {
                     <div class="notice error" role="alert">
-                        Could not load reservations or resource
-                        availability. Check your login session
-                        and API connection.
+                        Reservations or resource availability
+                        could not be loaded.
                     </div>
                 }
                 else
@@ -116,23 +109,16 @@
                     <div class="reservation-toolbar">
                         <div>
                             <h2>Booking Requests</h2>
-
-                            <p>
-                                Pending reservations first.
-                                Newest requests appear at the top.
-                            </p>
+                            <p>Pending reservations appear first.</p>
                         </div>
 
                         <form method="get"
                               action="/admin/reservations"
                               class="reservation-filter">
 
-                            <label for="reservation-filter">
-                                Status
-                            </label>
+                            <label for="reservation-filter">Status</label>
 
-                            <select id="reservation-filter"
-                                    name="filter">
+                            <select id="reservation-filter" name="filter">
 
                                 @foreach (var option in FilterOptions)
                                 {
@@ -144,21 +130,17 @@
 
                             </select>
 
-                            <button type="submit"
-                                    class="btn btn-secondary">
+                            <button type="submit" class="btn btn-secondary">
                                 Apply
                             </button>
+
                         </form>
                     </div>
 
                     @if (!VisibleReservations.Any())
                     {
                         <div class="empty-state">
-                            <h2>No reservations found</h2>
-
-                            <p>
-                                New booking requests will appear here.
-                            </p>
+                            <h2>No reservations found.</h2>
                         </div>
                     }
                     else
@@ -167,11 +149,13 @@
 
                             @foreach (var reservation in VisibleReservations)
                             {
-                                <article class="@GetCardClass(reservation.Status)">
+                                <article class="@GetCardClass(reservation.Status)"
+                                         @key="reservation.Id">
 
                                     <div class="reservation-card-header">
 
                                         <div class="reservation-card-heading">
+
                                             <span class="reservation-number">
                                                 Reservation #@reservation.Id
                                             </span>
@@ -183,18 +167,19 @@
                                                     ?? reservation.CustomerEmail
                                                     ?? "Unknown customer")
                                             </p>
+
                                         </div>
 
                                         <span class="@GetStatusClass(reservation.Status)">
                                             @reservation.Status
                                         </span>
+
                                     </div>
 
                                     <div class="reservation-details">
 
                                         <div>
                                             <span>Activity Date</span>
-
                                             <strong>
                                                 @reservation.ActivityDate.ToString(
                                                     "dd MMM yyyy",
@@ -204,13 +189,11 @@
 
                                         <div>
                                             <span>Participants</span>
-
                                             <strong>@reservation.ParticipantCount</strong>
                                         </div>
 
                                         <div>
                                             <span>Total Price</span>
-
                                             <strong>
                                                 @reservation.TotalPrice.ToString(
                                                     "N2",
@@ -221,10 +204,7 @@
 
                                         <div>
                                             <span>Payment</span>
-
-                                            <strong>
-                                                @reservation.PaymentStatus
-                                            </strong>
+                                            <strong>@reservation.PaymentStatus</strong>
                                         </div>
 
                                     </div>
@@ -235,7 +215,6 @@
 
                                         <p>
                                             <strong>Name:</strong>
-
                                             @(reservation.CustomerFullName
                                                 ?? "Not supplied")
                                         </p>
@@ -243,8 +222,7 @@
                                         <p>
                                             <strong>Email:</strong>
 
-                                            @if (!string.IsNullOrWhiteSpace(
-                                                reservation.ContactEmail))
+                                            @if (!string.IsNullOrWhiteSpace(reservation.ContactEmail))
                                             {
                                                 <a href="@($"mailto:{reservation.ContactEmail}")">
                                                     @reservation.ContactEmail
@@ -259,8 +237,7 @@
                                         <p>
                                             <strong>Mobile:</strong>
 
-                                            @if (!string.IsNullOrWhiteSpace(
-                                                reservation.ContactPhone))
+                                            @if (!string.IsNullOrWhiteSpace(reservation.ContactPhone))
                                             {
                                                 <a href="@($"tel:{GetTelNumber(reservation.ContactPhone)}")">
                                                     @reservation.ContactPhone
@@ -272,8 +249,7 @@
                                             }
                                         </p>
 
-                                        @if (!string.IsNullOrWhiteSpace(
-                                            reservation.ContactWhatsApp))
+                                        @if (!string.IsNullOrWhiteSpace(reservation.ContactWhatsApp))
                                         {
                                             <p>
                                                 <strong>WhatsApp:</strong>
@@ -288,17 +264,18 @@
 
                                     </div>
 
-                                    @if (!string.IsNullOrWhiteSpace(
-                                        reservation.CustomerNotes))
+                                    @if (!string.IsNullOrWhiteSpace(reservation.CustomerNotes))
                                     {
                                         <div class="reservation-notes">
                                             <strong>Customer Notes</strong>
-                                            <p>@reservation.CustomerNotes</p>
+
+                                            <p style="white-space: pre-wrap;">
+                                                @reservation.CustomerNotes
+                                            </p>
                                         </div>
                                     }
 
-                                    @if (reservation.Status ==
-                                        ReservationStatus.Pending)
+                                    @if (reservation.Status == ReservationStatus.Pending)
                                     {
                                         var availableInstructors =
                                             AvailableInstructors(reservation).ToArray();
@@ -307,90 +284,38 @@
                                             AvailableBoats(reservation).ToArray();
 
                                         var requiresBoat =
-                                            BoatRequirements.GetValueOrDefault(reservation.ActivityId);
+                                            BoatRequirements.GetValueOrDefault(
+                                                reservation.ActivityId);
 
-                                        <details class="reservation-review"
-                                                 name="reservation-review">
+                                        <details class="reservation-review">
 
                                             <summary>
                                                 Review and Assign Resources
-
-                                                <span class="reservation-review-hint">
-                                                    Expand
-                                                </span>
                                             </summary>
 
                                             <div class="reservation-review-body">
 
                                                 <p class="reservation-help">
-                                                    Only available instructors and
-                                                    boats are shown for this date.
+                                                    Only available resources
+                                                    are shown for this date.
                                                 </p>
 
                                                 <p class="reservation-help">
                                                     <strong>Boat requirement:</strong>
-                                                    @(requiresBoat ? "Required" : "Optional (shore activity)")
+                                                    @(requiresBoat ? "Required" : "Optional")
                                                 </p>
 
                                                 @if (availableInstructors.Length == 0)
                                                 {
-                                                    <div class="notice error"
-                                                         role="alert">
-
-                                                        <strong>
-                                                            No Instructors Available
-                                                        </strong>
-
-                                                        <p>
-                                                            All instructors are either
-                                                            inactive or already assigned
-                                                            on this date.
-
-                                                            This reservation cannot
-                                                            be confirmed until an
-                                                            instructor is available.
-                                                        </p>
-
+                                                    <div class="notice error">
+                                                        No suitable instructor is available.
                                                     </div>
                                                 }
 
                                                 @if (availableBoats.Length == 0)
                                                 {
-                                                    <div class="notice error"
-                                                         role="alert">
-
-                                                        <strong>
-                                                            No Suitable Boats Available
-                                                        </strong>
-
-                                                        <p>
-                                                            No active boat with enough
-                                                            capacity is available for
-                                                            this reservation date.
-
-                                                            Boats already assigned
-                                                            to another confirmed or
-                                                            completed reservation
-                                                            are excluded.
-                                                        </p>
-
-                                                        @if (requiresBoat)
-                                                        {
-                                                            <p>
-                                                                A boat is required for this
-                                                                activity. Confirmation is
-                                                                disabled until one is available.
-                                                            </p>
-                                                        }
-                                                        else
-                                                        {
-                                                            <p>
-                                                                A boat is optional for this
-                                                                activity. Shore reservations
-                                                                may be confirmed without one.
-                                                            </p>
-                                                        }
-
+                                                    <div class="notice error">
+                                                        No suitable boat is available for this date.
                                                     </div>
                                                 }
 
@@ -401,7 +326,6 @@
                                                     <CsrfField />
 
                                                     <div class="form-field">
-
                                                         <label for="@($"instructor-{reservation.Id}")">
                                                             Assign Instructor
                                                         </label>
@@ -423,7 +347,6 @@
                                                             }
 
                                                         </select>
-
                                                     </div>
 
                                                     <div class="form-field">
@@ -437,18 +360,11 @@
                                                                 required="@requiresBoat"
                                                                 disabled="@(requiresBoat && availableBoats.Length == 0)">
 
-                                                            @if (requiresBoat)
-                                                            {
-                                                                <option value="">
-                                                                    Select available boat (required)
-                                                                </option>
-                                                            }
-                                                            else
-                                                            {
-                                                                <option value="">
-                                                                    No boat (shore activity)
-                                                                </option>
-                                                            }
+                                                            <option value="">
+                                                                @(requiresBoat
+                                                                    ? "Select available boat (required)"
+                                                                    : "No boat")
+                                                            </option>
 
                                                             @foreach (var boat in availableBoats)
                                                             {
@@ -460,21 +376,7 @@
 
                                                         </select>
 
-                                                        @if (availableBoats.Length == 0)
-                                                        {
-                                                            <small class="booking-field-error">
-                                                                No suitable boat available
-                                                                for this date.
-                                                            </small>
-                                                        }
-
                                                     </div>
-
-                                                    <p class="reservation-help">
-                                                        Availability and capacity
-                                                        are checked again by the API
-                                                        before approval.
-                                                    </p>
 
                                                     <button type="submit"
                                                             class="btn btn-primary"
@@ -486,43 +388,79 @@
                                                     </button>
 
                                                 </form>
+                                            </div>
+                                        </details>
 
-                                                <div class="reservation-reject">
+                                        <details class="reservation-review">
 
-                                                    <form method="post"
-                                                          action="@($"/admin/reservations/{reservation.Id}/reject")">
+                                            <summary>Reject Reservation</summary>
 
-                                                        <CsrfField />
+                                            <div class="reservation-review-body">
 
-                                                        <button type="submit"
-                                                                class="btn btn-secondary">
+                                                <form method="post"
+                                                      action="@($"/admin/reservations/{reservation.Id}/reject")"
+                                                      class="admin-form">
 
-                                                            Reject Reservation
+                                                    <CsrfField />
 
-                                                        </button>
+                                                    <div class="form-field">
 
-                                                    </form>
+                                                        <label for="@($"reason-{reservation.Id}")">
+                                                            Reason for Rejection *
+                                                        </label>
 
-                                                </div>
+                                                        <textarea id="@($"reason-{reservation.Id}")"
+                                                                  name="Reason"
+                                                                  maxlength="1000"
+                                                                  rows="5"
+                                                                  placeholder="Explain why the reservation cannot be accepted."
+                                                                  required></textarea>
 
+                                                        <small>
+                                                            This explanation will be sent to the customer.
+                                                        </small>
+
+                                                    </div>
+
+                                                    <button type="submit"
+                                                            class="btn btn-secondary"
+                                                            style="background:#b42318;color:white;">
+
+                                                        Reject and Notify Customer
+
+                                                    </button>
+
+                                                </form>
                                             </div>
 
                                         </details>
                                     }
                                     else
                                     {
+                                        @if (reservation.Status == ReservationStatus.Rejected)
+                                        {
+                                            <div class="notice error">
+
+                                                <strong>Rejection Reason</strong>
+
+                                                <p style="white-space: pre-wrap;">
+                                                    @(reservation.RejectionReason
+                                                        ?? "No explanation was recorded.")
+                                                </p>
+
+                                            </div>
+                                        }
+
                                         <div class="reservation-assignments">
 
                                             <span>
                                                 <strong>Boat:</strong>
-                                                @(reservation.BoatName
-                                                    ?? "Not assigned")
+                                                @(reservation.BoatName ?? "Not assigned")
                                             </span>
 
                                             <span>
                                                 <strong>Instructor:</strong>
-                                                @(reservation.InstructorName
-                                                    ?? "Not assigned")
+                                                @(reservation.InstructorName ?? "Not assigned")
                                             </span>
 
                                         </div>
@@ -536,7 +474,6 @@
                 }
 
             </main>
-
         </div>
     </div>
 </section>
@@ -560,9 +497,7 @@
     public string? Filter { get; set; }
 
     private IReadOnlyList<AdminReservationItem> Reservations = [];
-
     private IReadOnlyList<BoatItem> Boats = [];
-
     private IReadOnlyList<InstructorItem> Instructors = [];
 
     private IReadOnlyList<ReservationResourceOccupancy> Occupancies = [];
@@ -572,12 +507,10 @@
     private bool LoadError;
 
     private int PendingCount =>
-        Reservations.Count(
-            x => x.Status == ReservationStatus.Pending);
+        Reservations.Count(x => x.Status == ReservationStatus.Pending);
 
     private int ConfirmedCount =>
-        Reservations.Count(
-            x => x.Status == ReservationStatus.Confirmed);
+        Reservations.Count(x => x.Status == ReservationStatus.Confirmed);
 
     private IEnumerable<AdminReservationItem> VisibleReservations
     {
@@ -585,25 +518,15 @@
         {
             IEnumerable<AdminReservationItem> items = Reservations;
 
-            if (!string.IsNullOrWhiteSpace(Filter) &&
-                !Filter.Equals(
-                    "All",
-                    StringComparison.OrdinalIgnoreCase))
+            if (Enum.TryParse<ReservationStatus>(
+                Filter, true, out var selectedStatus) &&
+                Enum.IsDefined(selectedStatus))
             {
-                if (Enum.TryParse<ReservationStatus>(
-                    Filter,
-                    true,
-                    out var selectedStatus) &&
-                    Enum.IsDefined(selectedStatus))
-                {
-                    items = items.Where(
-                        x => x.Status == selectedStatus);
-                }
+                items = items.Where(x => x.Status == selectedStatus);
             }
 
             return items
-                .OrderBy(x =>
-                    x.Status == ReservationStatus.Pending ? 0 : 1)
+                .OrderBy(x => x.Status == ReservationStatus.Pending ? 0 : 1)
                 .ThenByDescending(x => x.CreatedAtUtc)
                 .ThenByDescending(x => x.Id);
         }
@@ -636,10 +559,9 @@
 
     private static string GetTelNumber(string phone)
     {
-        return new string(
-            phone
-                .Where(c => char.IsAsciiDigit(c) || c == '+')
-                .ToArray());
+        return new string(phone
+            .Where(c => char.IsAsciiDigit(c) || c == '+')
+            .ToArray());
     }
 
     private static string GetContactPreferences(
@@ -647,14 +569,9 @@
     {
         var methods = new List<string>();
 
-        if (item.ContactByEmail)
-            methods.Add("Email");
-
-        if (item.ContactByPhone)
-            methods.Add("Phone");
-
-        if (item.ContactByWhatsApp)
-            methods.Add("WhatsApp");
+        if (item.ContactByEmail) methods.Add("Email");
+        if (item.ContactByPhone) methods.Add("Phone");
+        if (item.ContactByWhatsApp) methods.Add("WhatsApp");
 
         return methods.Count == 0
             ? "Not specified"
@@ -669,15 +586,13 @@
             StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string GetCardClass(
-        ReservationStatus status)
+    private static string GetCardClass(ReservationStatus status)
     {
         return "reservation-card reservation-card--" +
             status.ToString().ToLowerInvariant();
     }
 
-    private static string GetStatusClass(
-        ReservationStatus status)
+    private static string GetStatusClass(ReservationStatus status)
     {
         return "reservation-status status-" +
             status.ToString().ToLowerInvariant();
@@ -702,8 +617,7 @@
         }
 
         var token = await context.GetTokenAsync(
-            "DiveHubWeb",
-            "access_token");
+            "DiveHubWeb", "access_token");
 
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -713,17 +627,12 @@
 
         try
         {
-            Reservations =
-                await ReservationApi.GetAllAsync(token);
+            Reservations = await ReservationApi.GetAllAsync(token);
+            Boats = await OperationsApi.GetBoatsAsync(token);
+            Instructors = await OperationsApi.GetInstructorsAsync(token);
 
-            Boats =
-                await OperationsApi.GetBoatsAsync(token);
-
-            Instructors =
-                await OperationsApi.GetInstructorsAsync(token);
-
-            var requirements = await ActivityCatalogApi
-                .GetBoatRequirementsAsync(token);
+            var requirements =
+                await ActivityCatalogApi.GetBoatRequirementsAsync(token);
 
             BoatRequirements = requirements.ToDictionary(
                 x => x.ActivityId,
@@ -736,11 +645,10 @@
 
             if (pendingDates.Length > 0)
             {
-                Occupancies =
-                    await AvailabilityApi.GetOccupiedAsync(
-                        token,
-                        pendingDates.Min(),
-                        pendingDates.Max());
+                Occupancies = await AvailabilityApi.GetOccupiedAsync(
+                    token,
+                    pendingDates.Min(),
+                    pendingDates.Max());
             }
         }
         catch (HttpRequestException)

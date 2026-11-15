@@ -1,6 +1,4 @@
-
 using DiveHub.Application;
-using DiveHub.Domain;
 
 namespace DiveHub.Api;
 
@@ -36,7 +34,7 @@ public static class ActivityCatalogEndpoints
             IActivityCatalogService service,
             CancellationToken ct) =>
         {
-            if (!IsValid(request))
+            if (!ActivityCatalogRules.IsValid(request))
             {
                 return Results.BadRequest(
                     new { error = "Invalid activity information." });
@@ -55,7 +53,8 @@ public static class ActivityCatalogEndpoints
             IActivityCatalogService service,
             CancellationToken ct) =>
         {
-            if (id <= 0 || !IsValid(request))
+            if (id <= 0 ||
+                !ActivityCatalogRules.IsValid(request))
             {
                 return Results.BadRequest(
                     new { error = "Invalid activity information." });
@@ -78,42 +77,22 @@ public static class ActivityCatalogEndpoints
             if (id <= 0)
                 return Results.BadRequest();
 
-            var item = await service.SetPublishedAsync(
-                id, request.IsPublished, ct);
+            try
+            {
+                var item = await service.SetPublishedAsync(
+                    id, request.IsPublished, ct);
 
-            return item is null
-                ? Results.NotFound()
-                : Results.Ok(item);
+                return item is null
+                    ? Results.NotFound()
+                    : Results.Ok(item);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(
+                    new { error = exception.Message });
+            }
         });
 
         return app;
-    }
-
-    private static bool IsValid(
-        SaveActivityCatalogRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Name) ||
-            request.Name.Trim().Length > 120)
-            return false;
-
-        if (request.Description is null ||
-            request.Description.Length > 1000)
-            return false;
-
-        if (!Enum.IsDefined(request.Kind))
-            return false;
-
-        if (request.Price < 0 ||
-            request.Price > 999999.99m)
-            return false;
-
-        var currency = request.Currency?.Trim().ToUpperInvariant();
-
-        if (currency is null ||
-            currency.Length != 3 ||
-            currency.Any(x => x < 'A' || x > 'Z'))
-            return false;
-
-        return true;
     }
 }

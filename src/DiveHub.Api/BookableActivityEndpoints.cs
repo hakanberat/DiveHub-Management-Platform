@@ -1,4 +1,4 @@
-
+using DiveHub.Application;
 using DiveHub.Domain;
 using DiveHub.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +13,9 @@ public static class BookableActivityEndpoints
         string Description,
         ActivityKind Kind,
         decimal Price,
-        string Currency);
+        string Currency,
+        int MaxParticipants,
+        bool RequiresBoat);
 
     public static IEndpointRouteBuilder MapBookableActivityEndpoints(
         this IEndpointRouteBuilder app)
@@ -26,7 +28,11 @@ public static class BookableActivityEndpoints
             {
                 var activities = await db.Activities
                     .AsNoTracking()
-                    .Where(x => x.IsPublished)
+                    .Where(x =>
+                        x.IsPublished &&
+                        x.MaxParticipants >= 1 &&
+                        x.MaxParticipants <=
+                            ActivityCatalogRules.MaximumAllowedParticipants)
                     .OrderBy(x => x.Kind)
                     .ThenBy(x => x.Name)
                     .Select(x => new BookableActivityDto(
@@ -35,7 +41,9 @@ public static class BookableActivityEndpoints
                         x.Description,
                         x.Kind,
                         x.Price,
-                        x.Currency))
+                        x.Currency,
+                        x.MaxParticipants!.Value,
+                        x.RequiresBoat))
                     .ToListAsync(ct);
 
                 return Results.Ok(activities);

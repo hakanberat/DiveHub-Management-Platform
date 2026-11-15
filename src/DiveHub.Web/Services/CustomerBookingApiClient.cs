@@ -1,7 +1,7 @@
-
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using DiveHub.Application;
 using DiveHub.Domain;
 
 namespace DiveHub.Web.Services;
@@ -12,7 +12,9 @@ public sealed record BookableActivityItem(
     string Description,
     ActivityKind Kind,
     decimal Price,
-    string Currency);
+    string Currency,
+    int MaxParticipants,
+    bool RequiresBoat);
 
 public sealed record CreateCustomerBookingRequest(
     int ActivityId,
@@ -46,25 +48,17 @@ public sealed record CustomerReservationItem(
     string? ContactWhatsApp,
     bool ContactByEmail,
     bool ContactByPhone,
-    bool ContactByWhatsApp);
+    bool ContactByWhatsApp,
+    string? RejectionReason = null);
 
-public sealed class CustomerBookingApiClient
+public sealed class CustomerBookingApiClient(HttpClient http)
 {
-    private readonly HttpClient _http;
-
-    public CustomerBookingApiClient(HttpClient http)
-    {
-        _http = http;
-    }
-
     public async Task<IReadOnlyList<BookableActivityItem>>
-        GetActivitiesAsync(
-            CancellationToken ct = default)
+        GetActivitiesAsync(CancellationToken ct = default)
     {
-        return await _http
-            .GetFromJsonAsync<List<BookableActivityItem>>(
-                "/api/public/bookable-activities",
-                ct) ?? [];
+        return await http.GetFromJsonAsync<List<BookableActivityItem>>(
+            "/api/public/bookable-activities",
+            ct) ?? [];
     }
 
     public async Task<HttpStatusCode> CreateAsync(
@@ -79,32 +73,94 @@ public sealed class CustomerBookingApiClient
 
         request.Content = JsonContent.Create(booking);
 
-        using var response = await _http.SendAsync(
-            request,
-            ct);
+        using var response = await http.SendAsync(request, ct);
 
         return response.StatusCode;
     }
 
     public async Task<IReadOnlyList<CustomerReservationItem>>
-        GetMineAsync(
-            string token,
-            CancellationToken ct = default)
+        GetMineAsync(string token, CancellationToken ct = default)
     {
         using var request = NewAuthenticatedRequest(
             HttpMethod.Get,
             "/api/reservations/mine",
             token);
 
-        using var response = await _http.SendAsync(
-            request,
-            ct);
+        using var response = await http.SendAsync(request, ct);
 
         response.EnsureSuccessStatusCode();
 
         return await response.Content
             .ReadFromJsonAsync<List<CustomerReservationItem>>(
                 cancellationToken: ct) ?? [];
+    }
+
+    public async Task<IReadOnlyList<CustomerNotificationItem>>
+        GetNotificationsAsync(
+            string token,
+            CancellationToken ct = default)
+    {
+        using var request = NewAuthenticatedRequest(
+            HttpMethod.Get,
+            "/api/customer/notifications",
+            token);
+
+        using var response = await http.SendAsync(request, ct);
+
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content
+            .ReadFromJsonAsync<List<CustomerNotificationItem>>(
+                cancellationToken: ct) ?? [];
+    }
+
+    public async Task<int> GetUnreadNotificationCountAsync(
+        string token,
+        CancellationToken ct = default)
+    {
+        using var request = NewAuthenticatedRequest(
+            HttpMethod.Get,
+            "/api/customer/notifications/unread-count",
+            token);
+
+        using var response = await http.SendAsync(request, ct);
+
+        response.EnsureSuccessStatusCode();
+
+        var result = await response.Content
+            .ReadFromJsonAsync<UnreadNotificationCount>(
+                cancellationToken: ct);
+
+        return result?.Count ?? 0;
+    }
+
+    public async Task<HttpStatusCode> MarkNotificationReadAsync(
+        string token,
+        long id,
+        CancellationToken ct = default)
+    {
+        using var request = NewAuthenticatedRequest(
+            HttpMethod.Post,
+            $"/api/customer/notifications/{id}/read",
+            token);
+
+        using var response = await http.SendAsync(request, ct);
+
+        return response.StatusCode;
+    }
+
+    public async Task<HttpStatusCode> MarkAllNotificationsReadAsync(
+        string token,
+        CancellationToken ct = default)
+    {
+        using var request = NewAuthenticatedRequest(
+            HttpMethod.Post,
+            "/api/customer/notifications/read-all",
+            token);
+
+        using var response = await http.SendAsync(request, ct);
+
+        return response.StatusCode;
     }
 
     private static HttpRequestMessage NewAuthenticatedRequest(
