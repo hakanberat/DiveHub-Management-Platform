@@ -1,0 +1,179 @@
+
+@page "/team"
+
+@inject OperationsCatalogApiClient Api
+@inject InstructorPhotoApiClient PhotoApi
+
+<PageTitle>Our Team | Dive Hub</PageTitle>
+
+<section class="page-header">
+    <div class="container">
+
+        <span class="eyebrow">
+            MEET THE PROFESSIONALS
+        </span>
+
+        <h1>Our Team</h1>
+
+        <p>
+            Meet the people behind your underwater adventures.
+        </p>
+
+    </div>
+</section>
+
+<section class="container section team-section">
+
+    <div class="section-heading">
+        <div>
+            <span class="eyebrow dark">
+                DIVE HUB TEAM
+            </span>
+
+            <h2>Meet Our Instructors</h2>
+
+            <p>
+                Explore the experience and qualifications
+                of our diving professionals.
+            </p>
+        </div>
+    </div>
+
+    @if (LoadError)
+    {
+        <div class="notice error">
+            Team profiles could not be loaded.
+        </div>
+    }
+    else if (InstructorItems.Count == 0)
+    {
+        <div class="empty-state">
+            <h2>Our team profiles are coming soon.</h2>
+        </div>
+    }
+    else
+    {
+        <div class="team-grid">
+
+            @foreach (var instructor in InstructorItems)
+            {
+                <article class="team-card">
+
+                    <div class="team-photo-area">
+
+                        @if (Photos.TryGetValue(
+                            instructor.Id, out var photo))
+                        {
+                            <img src="@($"/media/instructors/{instructor.Id}")"
+                                 alt="@photo.AltText"
+                                 class="team-photo"
+                                 loading="lazy" />
+                        }
+                        else
+                        {
+                            <div class="team-photo-placeholder"
+                                 aria-hidden="true">
+
+                                <span>
+                                    @GetInitials(instructor.FullName)
+                                </span>
+
+                            </div>
+                        }
+
+                    </div>
+
+                    <div class="team-card-content">
+
+                        <span class="team-role">
+                            DIVE INSTRUCTOR
+                        </span>
+
+                        <h3>@instructor.FullName</h3>
+
+                        @if (!string.IsNullOrWhiteSpace(
+                            instructor.CertificationAgency))
+                        {
+                            <div class="team-certification">
+
+                                <span class="team-cert-label">
+                                    CERTIFICATION
+                                </span>
+
+                                <strong>
+                                    @instructor.CertificationAgency
+                                </strong>
+
+                                @if (!string.IsNullOrWhiteSpace(
+                                    instructor.CertificationNumber))
+                                {
+                                    <span>
+                                        No. @instructor.CertificationNumber
+                                    </span>
+                                }
+
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(
+                            instructor.Biography))
+                        {
+                            <p class="team-biography">
+                                @instructor.Biography
+                            </p>
+                        }
+
+                    </div>
+
+                </article>
+            }
+
+        </div>
+    }
+
+</section>
+
+@code {
+    private IReadOnlyList<InstructorItem> InstructorItems = [];
+
+    private Dictionary<int, InstructorPhotoDto> Photos = new();
+
+    private bool LoadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            InstructorItems =
+                await Api.GetPublicInstructorsAsync();
+
+            foreach (var instructor in InstructorItems)
+            {
+                var photo = await PhotoApi.GetPublicAsync(
+                    instructor.Id);
+
+                if (photo is not null)
+                    Photos[instructor.Id] = photo;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            LoadError = true;
+        }
+        catch (TaskCanceledException)
+        {
+            LoadError = true;
+        }
+    }
+
+    private static string GetInitials(string fullName)
+    {
+        var parts = fullName.Split(
+            ' ',
+            StringSplitOptions.RemoveEmptyEntries);
+
+        return string.Concat(
+            parts.Take(2)
+                 .Select(x => char.ToUpperInvariant(x[0])));
+    }
+}

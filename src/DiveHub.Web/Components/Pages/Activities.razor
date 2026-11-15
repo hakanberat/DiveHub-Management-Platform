@@ -1,0 +1,159 @@
+
+@page "/activities"
+@page "/activities/{Category}"
+
+@using System.Globalization
+
+@inject DiveHubApiClient Api
+
+<PageTitle>@PageHeading | Dive Hub</PageTitle>
+
+<section class="page-header">
+    <div class="container">
+
+        <span class="eyebrow">
+            DIVE HUB EXPERIENCES
+        </span>
+
+        <h1>@PageHeading</h1>
+
+        <p>@PageDescription</p>
+
+    </div>
+</section>
+
+<section class="container section">
+
+    @if (LoadError)
+    {
+        <div class="notice error">
+            Activities could not be loaded.
+        </div>
+    }
+    else if (!IsValidCategory)
+    {
+        <div class="empty-state">
+            <h2>Page not found.</h2>
+            <p>Please select a category.</p>
+
+            <a href="/activities/diving">
+                View Diving Activities
+            </a>
+        </div>
+    }
+    else if (ActivityItems.Count == 0)
+    {
+        <div class="empty-state">
+            <h2>No @PageHeading.ToLowerInvariant() available yet.</h2>
+
+            <p>
+                New experiences will appear here
+                when published.
+            </p>
+        </div>
+    }
+    else
+    {
+        <div class="content-grid">
+
+            @foreach (var activity in ActivityItems)
+            {
+                <article class="content-card">
+
+                    <ActivityPhotoGallery
+                        ActivityId="@activity.Id" />
+
+                    <span class="card-label">
+                        @(activity.Kind == ActivityKind.Course
+                            ? "DIVING COURSE"
+                            : "DIVING ACTIVITY")
+                    </span>
+
+                    <h2>@activity.Name</h2>
+
+                    <p>@activity.Description</p>
+
+                    <div class="card-footer">
+
+                        <strong>
+                            @activity.Price.ToString(
+                                "0.00",
+                                CultureInfo.InvariantCulture)
+                            @activity.Currency
+                        </strong>
+
+                    </div>
+
+                </article>
+            }
+
+        </div>
+    }
+
+</section>
+
+@code {
+
+    [Parameter]
+    public string? Category { get; set; }
+
+    private IReadOnlyList<Activity> ActivityItems = [];
+
+    private bool LoadError;
+
+    private bool IsCoursePage =>
+        string.Equals(
+            Category,
+            "courses",
+            StringComparison.OrdinalIgnoreCase);
+
+    private bool IsValidCategory =>
+        string.IsNullOrWhiteSpace(Category) ||
+        IsCoursePage ||
+        string.Equals(
+            Category,
+            "diving",
+            StringComparison.OrdinalIgnoreCase);
+
+    private string PageHeading =>
+        IsCoursePage
+            ? "Courses"
+            : "Diving Activities";
+
+    private string PageDescription =>
+        IsCoursePage
+            ? "Explore our scuba diving training courses and certifications."
+            : "Discover our underwater adventures and diving experiences.";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        LoadError = false;
+        ActivityItems = [];
+
+        if (!IsValidCategory)
+            return;
+
+        try
+        {
+            var allActivities =
+                await Api.GetActivitiesAsync();
+
+            var requiredKind = IsCoursePage
+                ? ActivityKind.Course
+                : ActivityKind.Dive;
+
+            ActivityItems = allActivities
+                .Where(x => x.Kind == requiredKind)
+                .OrderBy(x => x.Name)
+                .ToList();
+        }
+        catch (HttpRequestException)
+        {
+            LoadError = true;
+        }
+        catch (TaskCanceledException)
+        {
+            LoadError = true;
+        }
+    }
+}

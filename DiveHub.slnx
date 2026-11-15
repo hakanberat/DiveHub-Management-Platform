@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DiveHub.Api/DiveHub.Api.csproj" />
+    <Project Path="src/DiveHub.Application/DiveHub.Application.csproj" />
+    <Project Path="src/DiveHub.Domain/DiveHub.Domain.csproj" />
+    <Project Path="src/DiveHub.Infrastructure/DiveHub.Infrastructure.csproj" />
+    <Project Path="src/DiveHub.Web/DiveHub.Web.csproj" />
+  </Folder>
+</Solution>

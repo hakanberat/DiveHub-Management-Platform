@@ -1,0 +1,40 @@
+
+@inject ActivityPhotoApiClient Api
+
+@if (Photos.Count > 0)
+{
+    <div class="dive-photo-grid">
+
+        @foreach (var photo in Photos)
+        {
+            <img class="dive-photo"
+                 src="@($"/media/activities/{ActivityId}/{photo.Id}")"
+                 alt="@photo.AltText"
+                 loading="lazy" />
+        }
+
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int ActivityId { get; set; }
+
+    private IReadOnlyList<ActivityPhotoDto> Photos = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Photos = await Api.GetPublicAsync(ActivityId);
+        }
+        catch (HttpRequestException)
+        {
+            Photos = [];
+        }
+        catch (TaskCanceledException)
+        {
+            Photos = [];
+        }
+    }
+}

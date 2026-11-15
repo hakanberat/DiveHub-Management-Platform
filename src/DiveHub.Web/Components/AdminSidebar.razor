@@ -1,0 +1,184 @@
+@using Microsoft.AspNetCore.Authentication
+@using DiveHub.Web.Services
+
+@inject IHttpContextAccessor RequestContext
+@inject ReservationAdminApiClient ReservationApi
+
+<aside class="admin-sidebar">
+
+    <div class="sidebar-label">
+        MANAGEMENT
+    </div>
+
+    <nav class="admin-side-nav"
+         aria-label="Administration menu">
+
+        <a href="/admin"
+           class="@GetLinkClass("general")">
+
+            <img class="admin-nav-icon"
+                 src="/icons/admin/settings.svg"
+                 alt=""
+                 width="20"
+                 height="20" />
+
+            <span>General Settings</span>
+        </a>
+
+        <a href="/admin/dive-sites"
+           class="@GetLinkClass("dive-sites")">
+
+            <img class="admin-nav-icon"
+                 src="/icons/admin/dive-sites.svg"
+                 alt=""
+                 width="20"
+                 height="20" />
+
+            <span>Dive Sites</span>
+        </a>
+
+        <a href="/admin/diving-activities"
+           class="@GetLinkClass("diving-activities")">
+
+            <img class="admin-nav-icon"
+                 src="/icons/admin/activities.svg"
+                 alt=""
+                 width="20"
+                 height="20" />
+
+            <span>Diving Activities</span>
+        </a>
+
+        <a href="/admin/courses"
+           class="@GetLinkClass("courses")">
+
+            <img class="admin-nav-icon"
+                 src="/icons/admin/courses.svg"
+                 alt=""
+                 width="20"
+                 height="20" />
+
+            <span>Courses</span>
+        </a>
+
+        <a href="/admin/reservations"
+           class="@GetLinkClass("reservations")">
+
+            <img class="admin-nav-icon"
+                 src="/icons/admin/reservations.svg"
+                 alt=""
+                 width="20"
+                 height="20" />
+
+            <span>Reservations</span>
+
+            @if (PendingCount > 0)
+            {
+                <span class="sidebar-pending-badge"
+                      title="@($"{PendingCount} pending reservations")">
+
+                    @(PendingCount > 99
+                        ? "99+"
+                        : PendingCount.ToString())
+
+                </span>
+            }
+            else if (CountUnavailable)
+            {
+                <span class="sidebar-pending-badge sidebar-pending-badge--error"
+                      title="Pending reservation count unavailable">
+                    !
+                </span>
+            }
+
+        </a>
+
+        <a href="/admin/boats"
+           class="@GetLinkClass("boats")">
+
+            <img class="admin-nav-icon"
+                 src="/icons/admin/boats.svg"
+                 alt=""
+                 width="20"
+                 height="20" />
+
+            <span>Boats</span>
+        </a>
+
+        <a href="/admin/instructors"
+           class="@GetLinkClass("instructors")">
+
+            <img class="admin-nav-icon"
+                 src="/icons/admin/instructors.svg"
+                 alt=""
+                 width="20"
+                 height="20" />
+
+            <span>Instructors</span>
+        </a>
+
+    </nav>
+
+    <div class="sidebar-hint">
+        Dive Hub Administration
+    </div>
+
+</aside>
+
+@code {
+    [Parameter]
+    public string Active { get; set; } = "general";
+
+    private int PendingCount;
+
+    private bool CountUnavailable;
+
+    protected override async Task OnInitializedAsync()
+    {
+        PendingCount = 0;
+        CountUnavailable = false;
+
+        var context = RequestContext.HttpContext;
+
+        if (context is null)
+        {
+            CountUnavailable = true;
+            return;
+        }
+
+        var token = await context.GetTokenAsync(
+            "DiveHubWeb",
+            "access_token");
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            CountUnavailable = true;
+            return;
+        }
+
+        try
+        {
+            PendingCount =
+                await ReservationApi.GetPendingCountAsync(token);
+        }
+        catch (HttpRequestException)
+        {
+            CountUnavailable = true;
+        }
+        catch (TaskCanceledException)
+        {
+            CountUnavailable = true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            CountUnavailable = true;
+        }
+    }
+
+    private string GetLinkClass(string key)
+    {
+        return Active == key
+            ? "sidebar-link active"
+            : "sidebar-link";
+    }
+}

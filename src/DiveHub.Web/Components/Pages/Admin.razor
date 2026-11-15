@@ -1,0 +1,199 @@
+
+@page "/admin"
+@attribute [Authorize(Roles = "Admin")]
+
+@using Microsoft.AspNetCore.Authentication
+@inject IHttpContextAccessor RequestContext
+@inject DiveHubApiClient Api
+
+<PageTitle>Admin Dashboard | Dive Hub</PageTitle>
+
+<section class="admin-page">
+    <div class="container">
+
+        <div class="admin-heading">
+            <div>
+                <span class="eyebrow dark">CONTROL CENTER</span>
+                <h1>Administration</h1>
+                <p>Manage Dive Hub from one place.</p>
+            </div>
+
+            <a class="btn btn-secondary" href="/">
+                View Website
+            </a>
+        </div>
+
+        <div class="admin-grid">
+
+            <AdminSidebar Active="general" />
+
+            <div class="admin-main">
+
+                <div class="panel-header">
+                    <div>
+                        <h2>Dive Center Information</h2>
+                        <p>
+                            Information displayed on the
+                            public website.
+                        </p>
+                    </div>
+                </div>
+
+                @if (Status == "saved")
+                {
+                    <div class="notice success">
+                        Site information updated successfully.
+                    </div>
+                }
+                else if (Status == "invalid")
+                {
+                    <div class="notice error">
+                        Invalid information. Check the fields.
+                    </div>
+                }
+                else if (Status == "error")
+                {
+                    <div class="notice error">
+                        Update failed. Please try again.
+                    </div>
+                }
+
+                @if (Unavailable)
+                {
+                    <div class="notice error">
+                        API unavailable. Make sure
+                        DiveHub.Api is running.
+                    </div>
+                }
+                else if (Site is null)
+                {
+                    <div class="notice error">
+                        Unable to load site information.
+                    </div>
+                }
+                else
+                {
+                    <form method="post"
+                          action="/admin/site/save"
+                          class="admin-form">
+
+                        <CsrfField />
+
+                        <div class="form-field">
+                            <label for="name">
+                                Dive Center Name
+                            </label>
+                            <input id="name"
+                                   name="Name"
+                                   value="@Site.Name"
+                                   maxlength="160"
+                                   required />
+                        </div>
+
+                        <div class="form-field">
+                            <label for="description">
+                                Description
+                            </label>
+                            <textarea id="description"
+                                      name="Description"
+                                      maxlength="4000"
+                                      rows="5">@Site.Description</textarea>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="address">
+                                Address
+                            </label>
+                            <textarea id="address"
+                                      name="Address"
+                                      maxlength="500"
+                                      rows="3">@Site.Address</textarea>
+                        </div>
+
+                        <div class="form-row">
+
+                            <div class="form-field">
+                                <label for="phone">
+                                    Phone
+                                </label>
+                                <input id="phone"
+                                       name="Phone"
+                                       type="tel"
+                                       maxlength="50"
+                                       value="@Site.Phone" />
+                            </div>
+
+                            <div class="form-field">
+                                <label for="whatsapp">
+                                    WhatsApp
+                                </label>
+                                <input id="whatsapp"
+                                       name="WhatsApp"
+                                       type="tel"
+                                       maxlength="50"
+                                       value="@Site.WhatsApp" />
+                            </div>
+
+                        </div>
+
+                        <div class="form-field">
+                            <label for="email">
+                                Email Address
+                            </label>
+                            <input id="email"
+                                   name="Email"
+                                   type="email"
+                                   maxlength="254"
+                                   value="@Site.Email" />
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit"
+                                    class="btn btn-primary">
+                                Save Changes
+                            </button>
+                        </div>
+
+                    </form>
+                }
+
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    private SiteSettings? Site;
+    private bool Unavailable;
+
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? Status { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var context = RequestContext.HttpContext;
+
+        if (context is null)
+            return;
+
+        var token = await context.GetTokenAsync(
+            "DiveHubWeb", "access_token");
+
+        if (string.IsNullOrWhiteSpace(token))
+            return;
+
+        try
+        {
+            Site = await Api.GetAdminSiteAsync(token);
+        }
+        catch (HttpRequestException)
+        {
+            Unavailable = true;
+        }
+        catch (TaskCanceledException)
+        {
+            Unavailable = true;
+        }
+    }
+}
+

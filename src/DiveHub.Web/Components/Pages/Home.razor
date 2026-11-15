@@ -1,0 +1,154 @@
+
+@page "/"
+@inject DiveHubApiClient Api
+
+<PageTitle>Dive Hub | Scuba Diving</PageTitle>
+
+<section class="hero">
+    <div class="container hero-content">
+        <span class="eyebrow">EXPLORE THE UNDERWATER WORLD</span>
+
+        <h1>
+            Discover the
+            <span>Deep Blue.</span>
+        </h1>
+
+        <p class="hero-description">
+            @if (Site is not null &&
+                 !string.IsNullOrWhiteSpace(Site.Description))
+            {
+                @Site.Description
+            }
+            else
+            {
+                <span>
+                    Explore diving experiences, training courses
+                    and underwater destinations with Dive Hub.
+                </span>
+            }
+        </p>
+
+        <div class="hero-actions">
+            <a class="btn btn-primary" href="/activities/diving">
+                Explore Activities
+            </a>
+
+            <a class="btn btn-outline" href="/dive-sites">
+                Dive Sites
+            </a>
+        </div>
+
+        <div class="hero-bottom">
+            <span>SCUBA DIVING</span>
+            <span>TRAINING</span>
+            <span>EXPLORATION</span>
+        </div>
+    </div>
+
+    <div class="hero-orb"></div>
+</section>
+
+<section class="container section">
+    <div class="section-heading">
+        <div>
+            <span class="eyebrow dark">THE EXPERIENCE</span>
+            <h2>Welcome to @(Site?.Name ?? "Dive Hub")</h2>
+        </div>
+    </div>
+
+    <div class="feature-grid">
+
+        <!-- DIVING ACTIVITIES -->
+        <a href="/activities/diving" class="feature-card">
+            <div class="feature-number">01</div>
+
+            <h3>Diving Activities</h3>
+
+            <p>Discover available diving experiences.</p>
+
+            <span class="feature-link">
+                Explore &rarr;
+            </span>
+        </a>
+
+        <!-- TRAINING COURSES -->
+        <a href="/activities/courses" class="feature-card">
+            <div class="feature-number">02</div>
+
+            <h3>Training Courses</h3>
+
+            <p>Explore diving courses and certifications.</p>
+
+            <span class="feature-link">
+                Discover &rarr;
+            </span>
+        </a>
+
+        <!-- DIVE SITES -->
+        <a href="/dive-sites" class="feature-card">
+            <div class="feature-number">03</div>
+
+            <h3>Dive Sites</h3>
+
+            <p>Explore our underwater destinations.</p>
+
+            <span class="feature-link">
+                View Sites &rarr;
+            </span>
+        </a>
+
+    </div>
+</section>
+
+<section class="contact-section">
+    <div class="container contact-inner">
+        <div>
+            <span class="eyebrow">GET IN TOUCH</span>
+
+            <h2>Start your next adventure.</h2>
+
+            @if (Site is not null)
+            {
+                @if (!string.IsNullOrWhiteSpace(Site.Address))
+                {
+                    <p>@Site.Address</p>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(Site.Phone))
+                {
+                    <p>Phone: @Site.Phone</p>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(Site.Email))
+                {
+                    <p>Email: @Site.Email</p>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(Site.WhatsApp))
+                {
+                    <p>WhatsApp: @Site.WhatsApp</p>
+                }
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private SiteSettings? Site;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Site = await Api.GetPublicSiteAsync();
+        }
+        catch (HttpRequestException)
+        {
+            Site = null;
+        }
+        catch (TaskCanceledException)
+        {
+            Site = null;
+        }
+    }
+}
