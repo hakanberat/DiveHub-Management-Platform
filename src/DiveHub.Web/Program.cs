@@ -1,4 +1,3 @@
-
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using DiveHub.Application;
@@ -19,13 +18,13 @@ builder.Services.AddProblemDetails();
 
 builder.Services.AddHttpClient<DiveHubApiClient>(client =>
 {
-    var url = builder.Configuration["ApiBaseUrl"]
+    var url = builder.Configuration["Api:BaseUrl"]
+        ?? builder.Configuration["ApiBaseUrl"]
         ?? "http://localhost:5080/";
 
     client.BaseAddress = new Uri(url);
     client.Timeout = TimeSpan.FromSeconds(15);
 });
-
 
 builder.Services.AddHttpClient<DiveSitePhotoApiClient>(client =>
 {
@@ -36,8 +35,6 @@ builder.Services.AddHttpClient<DiveSitePhotoApiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(60);
 });
 
-
-
 builder.Services.AddHttpClient<AdminDiveSiteApiClient>(client =>
 {
     var url = builder.Configuration["ApiBaseUrl"]
@@ -46,7 +43,6 @@ builder.Services.AddHttpClient<AdminDiveSiteApiClient>(client =>
     client.BaseAddress = new Uri(url);
     client.Timeout = TimeSpan.FromSeconds(15);
 });
-
 
 builder.Services.AddHttpClient<AdminActivityCatalogApiClient>(client =>
 {
@@ -66,7 +62,6 @@ builder.Services.AddHttpClient<ActivityPhotoApiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(60);
 });
 
-
 builder.Services.AddHttpClient<OperationsCatalogApiClient>(client =>
 {
     var url = builder.Configuration["ApiBaseUrl"]
@@ -85,8 +80,35 @@ builder.Services.AddHttpClient<InstructorPhotoApiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(60);
 });
 
+builder.Services.AddHttpClient<ReservationAdminApiClient>(client =>
+{
+    var url = builder.Configuration["Api:BaseUrl"]
+        ?? builder.Configuration["ApiBaseUrl"]
+        ?? "http://localhost:5080/";
 
+    client.BaseAddress = new Uri(url);
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
 
+builder.Services.AddHttpClient<CustomerBookingApiClient>(client =>
+{
+    var url = builder.Configuration["Api:BaseUrl"]
+        ?? builder.Configuration["ApiBaseUrl"]
+        ?? "http://localhost:5080/";
+
+    client.BaseAddress = new Uri(url);
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+
+builder.Services.AddHttpClient<ReservationAvailabilityApiClient>(client =>
+{
+    var url = builder.Configuration["Api:BaseUrl"]
+        ?? builder.Configuration["ApiBaseUrl"]
+        ?? "http://localhost:5080/";
+
+    client.BaseAddress = new Uri(url);
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
 
 builder.Services
     .AddAuthentication(WebScheme)
@@ -95,20 +117,46 @@ builder.Services
         options.Cookie.Name = "DiveHub.Web.Session";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
+
         options.Cookie.SecurePolicy =
             builder.Environment.IsDevelopment()
                 ? CookieSecurePolicy.SameAsRequest
                 : CookieSecurePolicy.Always;
 
-        options.LoginPath = "/login";
-        options.AccessDeniedPath = "/login?error=access";
+        options.LoginPath = "/customer/login";
+        options.AccessDeniedPath = "/customer/login";
+
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = false;
+
+        options.Events.OnRedirectToLogin = context =>
+        {
+            var url = context.Request.Path
+                .StartsWithSegments("/admin")
+                    ? "/login"
+                    : "/customer/login";
+
+            context.Response.Redirect(url);
+            return Task.CompletedTask;
+        };
+
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            var url = context.Request.Path
+                .StartsWithSegments("/admin")
+                    ? "/login?error=access"
+                    : "/customer/login?error=access";
+
+            context.Response.Redirect(url);
+            return Task.CompletedTask;
+        };
     });
 
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("AdminOnly", policy =>
-        policy.RequireRole("Admin"));
+        policy.RequireRole("Admin"))
+    .AddPolicy("CustomerOnly", policy =>
+        policy.RequireRole("Customer"));
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -126,37 +174,6 @@ builder.Services.AddRateLimiter(options =>
             }));
 });
 
-builder.Services.AddHttpClient<DiveHub.Web.Services.ReservationAdminApiClient>(
-    client =>
-    {
-        var apiBaseUrl =
-            builder.Configuration["Api:BaseUrl"]
-            ?? builder.Configuration["ApiBaseUrl"]
-            ?? "http://localhost:5080/";
-
-        client.BaseAddress = new Uri(
-            apiBaseUrl,
-            UriKind.Absolute);
-    });
-builder.Services.AddHttpClient<DiveHub.Web.Services.CustomerBookingApiClient>(
-    client =>
-    {
-        var url = builder.Configuration["Api:BaseUrl"]
-            ?? builder.Configuration["ApiBaseUrl"]
-            ?? "http://localhost:5080/";
-
-        client.BaseAddress = new Uri(url, UriKind.Absolute);
-    });
-builder.Services.AddHttpClient<DiveHub.Web.Services.ReservationAvailabilityApiClient>(
-    client =>
-    {
-        var url =
-            builder.Configuration["Api:BaseUrl"]
-            ?? builder.Configuration["ApiBaseUrl"]
-            ?? "http://localhost:5080/";
-
-        client.BaseAddress = new Uri(url, UriKind.Absolute);
-    });
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -187,9 +204,10 @@ app.Use(async (context, next) =>
 
     await next(context);
 });
+
 app.UseAntiforgery();
 
-// ADMIN LOGIN
+// ADMIN LOGIN: existing behavior preserved.
 app.MapPost("/account/login", async (
     HttpContext context,
     IAntiforgery antiforgery,
@@ -205,7 +223,9 @@ app.MapPost("/account/login", async (
 
     if (string.IsNullOrWhiteSpace(email) ||
         string.IsNullOrWhiteSpace(password))
+    {
         return Results.Redirect("/login?error=invalid");
+    }
 
     try
     {
@@ -213,11 +233,14 @@ app.MapPost("/account/login", async (
 
         if (token is null ||
             string.IsNullOrWhiteSpace(token.AccessToken))
+        {
             return Results.Redirect("/login?error=invalid");
+        }
 
-        // Web paneline sadece Admin girebilir.
         if (!await api.IsAdminAsync(token.AccessToken))
+        {
             return Results.Redirect("/login?error=access");
+        }
 
         var claims = new[]
         {
@@ -226,7 +249,8 @@ app.MapPost("/account/login", async (
         };
 
         var identity = new ClaimsIdentity(
-            claims, WebScheme);
+            claims,
+            WebScheme);
 
         var principal = new ClaimsPrincipal(identity);
 
@@ -235,7 +259,7 @@ app.MapPost("/account/login", async (
             IsPersistent = false,
             AllowRefresh = false,
             ExpiresUtc = DateTimeOffset.UtcNow.AddSeconds(
-                Math.Clamp(token.ExpiresIn, 1, 28800))
+                Math.Clamp(token.ExpiresIn, 1L, 28800L))
         };
 
         properties.StoreTokens(
@@ -248,7 +272,9 @@ app.MapPost("/account/login", async (
         ]);
 
         await context.SignInAsync(
-            WebScheme, principal, properties);
+            WebScheme,
+            principal,
+            properties);
 
         return Results.Redirect("/admin");
     }
@@ -263,7 +289,7 @@ app.MapPost("/account/login", async (
 })
 .RequireRateLimiting("login");
 
-// LOGOUT
+// SHARED LOGOUT.
 app.MapPost("/account/logout", async (
     HttpContext context,
     IAntiforgery antiforgery) =>
@@ -277,7 +303,7 @@ app.MapPost("/account/logout", async (
 })
 .RequireAuthorization();
 
-// UPDATE SITE SETTINGS
+// EXISTING ADMIN SITE SETTINGS.
 app.MapPost("/admin/site/save", async (
     HttpContext context,
     IAntiforgery antiforgery,
@@ -287,10 +313,13 @@ app.MapPost("/admin/site/save", async (
         return Results.BadRequest("Invalid security token.");
 
     var token = await context.GetTokenAsync(
-        WebScheme, "access_token");
+        WebScheme,
+        "access_token");
 
     if (string.IsNullOrWhiteSpace(token))
+    {
         return Results.Redirect("/login?error=expired");
+    }
 
     var form = await context.Request.ReadFormAsync();
 
@@ -310,19 +339,26 @@ app.MapPost("/admin/site/save", async (
         request.Phone.Length > 50 ||
         request.Email.Length > 254 ||
         request.WhatsApp.Length > 50)
+    {
         return Results.Redirect("/admin?status=invalid");
+    }
 
     try
     {
-        var result = await api.UpdateSiteAsync(token, request);
+        var result = await api.UpdateSiteAsync(
+            token,
+            request);
 
         if (result == System.Net.HttpStatusCode.Unauthorized ||
             result == System.Net.HttpStatusCode.Forbidden)
+        {
             return Results.Redirect("/login?error=expired");
+        }
 
-        return Results.Redirect(result == System.Net.HttpStatusCode.OK
-            ? "/admin?status=saved"
-            : "/admin?status=error");
+        return Results.Redirect(
+            result == System.Net.HttpStatusCode.OK
+                ? "/admin?status=saved"
+                : "/admin?status=error");
     }
     catch (HttpRequestException)
     {
@@ -335,16 +371,38 @@ app.MapPost("/admin/site/save", async (
 })
 .RequireAuthorization("AdminOnly");
 
+// Existing static content and management endpoints.
 app.MapStaticAssets();
-DiveHub.Web.AdminDiveSiteWebEndpoints.MapAdminDiveSiteWebEndpoints(app);
-DiveHub.Web.DiveSitePhotoWebEndpoints.MapDiveSitePhotoWebEndpoints(app);
-DiveHub.Web.AdminActivityCatalogWebEndpoints.MapAdminActivityCatalogWebEndpoints(app);
-DiveHub.Web.ActivityPhotoWebEndpoints.MapActivityPhotoWebEndpoints(app);
-DiveHub.Web.OperationsCatalogWebEndpoints.MapOperationsCatalogWebEndpoints(app);
-DiveHub.Web.InstructorPhotoWebEndpoints.MapInstructorPhotoWebEndpoints(app);
+
+DiveHub.Web.AdminDiveSiteWebEndpoints
+    .MapAdminDiveSiteWebEndpoints(app);
+
+DiveHub.Web.DiveSitePhotoWebEndpoints
+    .MapDiveSitePhotoWebEndpoints(app);
+
+DiveHub.Web.AdminActivityCatalogWebEndpoints
+    .MapAdminActivityCatalogWebEndpoints(app);
+
+DiveHub.Web.ActivityPhotoWebEndpoints
+    .MapActivityPhotoWebEndpoints(app);
+
+DiveHub.Web.OperationsCatalogWebEndpoints
+    .MapOperationsCatalogWebEndpoints(app);
+
+DiveHub.Web.InstructorPhotoWebEndpoints
+    .MapInstructorPhotoWebEndpoints(app);
+
+// NEW: Customer registration and login endpoints.
+DiveHub.Web.CustomerAccountWebEndpoints
+    .MapCustomerAccountWebEndpoints(app);
+
+// Existing reservation endpoints.
+DiveHub.Web.AdminReservationWebEndpoints
+    .MapAdminReservationWebEndpoints(app);
+
+DiveHub.Web.CustomerBookingWebEndpoints
+    .MapCustomerBookingWebEndpoints(app);
+
 app.MapRazorComponents<App>();
 
-DiveHub.Web.AdminReservationWebEndpoints.MapAdminReservationWebEndpoints(app);
-DiveHub.Web.CustomerBookingWebEndpoints.MapCustomerBookingWebEndpoints(app);
 app.Run();
-

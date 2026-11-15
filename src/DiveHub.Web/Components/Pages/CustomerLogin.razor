@@ -1,0 +1,108 @@
+
+@page "/customer/login"
+
+<PageTitle>Customer Sign In | Dive Hub</PageTitle>
+
+<section class="auth-section">
+    <div class="auth-card">
+
+        <span class="eyebrow dark">
+            DIVE HUB ACCOUNT
+        </span>
+
+        <h1>Welcome back</h1>
+
+        <p>
+            Sign in to manage your diving reservations.
+        </p>
+
+        @if (Registered == "1")
+        {
+            <div class="notice success" role="status">
+                Your account has been created.
+                You can now sign in.
+            </div>
+        }
+
+        @if (Error == "invalid")
+        {
+            <div class="notice error" role="alert">
+                Invalid email or password.
+            </div>
+        }
+        else if (Error == "access")
+        {
+            <div class="notice error" role="alert">
+                This account does not have
+                Customer access.
+            </div>
+        }
+        else if (Error == "server")
+        {
+            <div class="notice error" role="alert">
+                Sign-in service is currently unavailable.
+            </div>
+        }
+
+        <form method="post"
+              action="/auth/customer/login"
+              class="form-stack">
+
+            <CsrfField />
+
+            <div class="form-field">
+                <label for="customer-login-email">
+                    Email Address
+                </label>
+
+                <input id="customer-login-email"
+                       name="Email"
+                       type="email"
+                       autocomplete="username"
+                       maxlength="254"
+                       required />
+            </div>
+
+            <div class="form-field">
+                <label for="customer-login-password">
+                    Password
+                </label>
+
+                <input id="customer-login-password"
+                       name="Password"
+                       type="password"
+                       autocomplete="current-password"
+                       required />
+            </div>
+
+            <button type="submit"
+                    class="btn btn-primary btn-block">
+                Sign In
+            </button>
+
+        </form>
+
+        <div class="auth-bottom">
+
+            <a href="/customer/register">
+                Create an account
+            </a>
+
+            <span> · </span>
+
+            <a href="/login">
+                Admin Sign In
+            </a>
+
+        </div>
+
+    </div>
+</section>
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+
+    [SupplyParameterFromQuery(Name = "registered")]
+    public string? Registered { get; set; }
+}

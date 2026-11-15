@@ -1,4 +1,3 @@
-
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -13,10 +12,17 @@ public sealed class ApiLoginResponse
     public long ExpiresIn { get; set; }
 }
 
+public sealed record ApiAccountProfile(
+    Guid Id,
+    string? FullName,
+    string? Email,
+    string[] Roles);
+
 public sealed class DiveHubApiClient(HttpClient client)
 {
     public async Task<ApiLoginResponse?> LoginAsync(
-        string email, string password)
+        string email,
+        string password)
     {
         using var response = await client.PostAsJsonAsync(
             "api/auth/login",
@@ -29,10 +35,56 @@ public sealed class DiveHubApiClient(HttpClient client)
             .ReadFromJsonAsync<ApiLoginResponse>();
     }
 
+    public async Task<HttpStatusCode> RegisterCustomerAsync(
+        string fullName,
+        string email,
+        string password,
+        CancellationToken ct = default)
+    {
+        using var response = await client.PostAsJsonAsync(
+            "api/auth/register",
+            new RegisterRequest(
+                fullName,
+                email,
+                password),
+            ct);
+
+        return response.StatusCode;
+    }
+
+    public async Task<ApiAccountProfile?> GetProfileAsync(
+        string token,
+        CancellationToken ct = default)
+    {
+        using var request = CreateAuthorizedRequest(
+            HttpMethod.Get,
+            "api/auth/me",
+            token);
+
+        using var response = await client.SendAsync(
+            request,
+            ct);
+
+        if (response.StatusCode is
+            HttpStatusCode.Unauthorized or
+            HttpStatusCode.Forbidden)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content
+            .ReadFromJsonAsync<ApiAccountProfile>(
+                cancellationToken: ct);
+    }
+
     public async Task<bool> IsAdminAsync(string token)
     {
         using var request = CreateAuthorizedRequest(
-            HttpMethod.Get, "api/admin/site", token);
+            HttpMethod.Get,
+            "api/admin/site",
+            token);
 
         using var response = await client.SendAsync(request);
 
@@ -49,7 +101,9 @@ public sealed class DiveHubApiClient(HttpClient client)
         string token)
     {
         using var request = CreateAuthorizedRequest(
-            HttpMethod.Get, "api/admin/site", token);
+            HttpMethod.Get,
+            "api/admin/site",
+            token);
 
         using var response = await client.SendAsync(request);
 
@@ -61,10 +115,13 @@ public sealed class DiveHubApiClient(HttpClient client)
     }
 
     public async Task<HttpStatusCode> UpdateSiteAsync(
-        string token, UpdateSiteRequest data)
+        string token,
+        UpdateSiteRequest data)
     {
         using var request = CreateAuthorizedRequest(
-            HttpMethod.Put, "api/admin/site", token);
+            HttpMethod.Put,
+            "api/admin/site",
+            token);
 
         request.Content = JsonContent.Create(data);
 
@@ -75,27 +132,33 @@ public sealed class DiveHubApiClient(HttpClient client)
 
     public async Task<IReadOnlyList<DiveSite>> GetDiveSitesAsync()
     {
-        var sites = await client.GetFromJsonAsync<List<DiveSite>>(
-            "api/public/dive-sites");
+        var sites = await client
+            .GetFromJsonAsync<List<DiveSite>>(
+                "api/public/dive-sites");
 
         return sites ?? [];
     }
 
     public async Task<IReadOnlyList<Activity>> GetActivitiesAsync()
     {
-        var activities = await client.GetFromJsonAsync<List<Activity>>(
-            "api/public/activities");
+        var activities = await client
+            .GetFromJsonAsync<List<Activity>>(
+                "api/public/activities");
 
         return activities ?? [];
     }
 
     private static HttpRequestMessage CreateAuthorizedRequest(
-        HttpMethod method, string url, string token)
+        HttpMethod method,
+        string url,
+        string token)
     {
         var request = new HttpRequestMessage(method, url);
 
         request.Headers.Authorization =
-            new AuthenticationHeaderValue("Bearer", token);
+            new AuthenticationHeaderValue(
+                "Bearer",
+                token);
 
         return request;
     }

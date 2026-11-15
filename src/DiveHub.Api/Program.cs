@@ -1,4 +1,3 @@
-
 using DiveHub.Application;
 using DiveHub.Domain;
 using DiveHub.Infrastructure;
@@ -59,7 +58,9 @@ builder.Services
 builder.Services
     .AddAuthorizationBuilder()
     .AddPolicy("AdminOnly", policy =>
-        policy.RequireRole("Admin"));
+        policy.RequireRole("Admin"))
+    .AddPolicy("CustomerOnly", policy =>
+        policy.RequireRole("Customer"));
 
 builder.Services.AddProblemDetails();
 
@@ -93,7 +94,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Local development only: create first administrator.
+// Development-only administrator initialization.
 if (seedAdmin)
 {
     if (!app.Environment.IsDevelopment())
@@ -128,15 +129,19 @@ if (seedAdmin)
 
     if (string.IsNullOrWhiteSpace(email) ||
         string.IsNullOrWhiteSpace(password))
+    {
         throw new InvalidOperationException(
             "BootstrapAdmin credentials are required.");
+    }
 
     var users = scope.ServiceProvider
         .GetRequiredService<UserManager<ApplicationUser>>();
 
     if (await users.FindByEmailAsync(email) is not null)
+    {
         throw new InvalidOperationException(
             "Account already exists. Bootstrap will not promote it.");
+    }
 
     var admin = new ApplicationUser
     {
@@ -150,23 +155,31 @@ if (seedAdmin)
     var created = await users.CreateAsync(admin, password);
 
     if (!created.Succeeded)
+    {
         throw new InvalidOperationException(
             string.Join("; ",
                 created.Errors.Select(x => x.Description)));
+    }
 
     var assigned = await users.AddToRoleAsync(admin, "Admin");
 
     if (!assigned.Succeeded)
+    {
         throw new InvalidOperationException(
             "Admin role assignment failed.");
+    }
 
     Console.WriteLine("Dive Hub administrator created.");
     return;
 }
 
-// Health checks
+// Health checks.
 app.MapGet("/health", () =>
-    Results.Ok(new { status = "running", app = "Dive Hub" }));
+    Results.Ok(new
+    {
+        status = "running",
+        app = "Dive Hub"
+    }));
 
 app.MapGet("/health/db", async (DiveHubDbContext db) =>
     await db.Database.CanConnectAsync()
@@ -175,24 +188,28 @@ app.MapGet("/health/db", async (DiveHubDbContext db) =>
             title: "Database unavailable",
             statusCode: 503));
 
-// Public registration
+// Customer registration.
 app.MapPost("/api/auth/register",
     async (RegisterRequest request,
         UserManager<ApplicationUser> users,
         RoleManager<IdentityRole<Guid>> roles) =>
     {
         if (string.IsNullOrWhiteSpace(request.FullName) ||
-            request.FullName.Length > 200 ||
+            request.FullName.Trim().Length is < 2 or > 200 ||
             string.IsNullOrWhiteSpace(request.Email) ||
-            request.Email.Length > 254 ||
+            request.Email.Trim().Length > 254 ||
             string.IsNullOrWhiteSpace(request.Password))
+        {
             return Results.BadRequest(
                 new { error = "Invalid registration data." });
+        }
 
         if (!await roles.RoleExistsAsync("Customer"))
+        {
             return Results.Problem(
                 title: "Account setup unavailable",
                 statusCode: 503);
+        }
 
         var email = request.Email.Trim();
 
@@ -204,38 +221,51 @@ app.MapPost("/api/auth/register",
             FullName = request.FullName.Trim()
         };
 
-        var result = await users.CreateAsync(user, request.Password);
+        var result = await users.CreateAsync(
+            user,
+            request.Password);
 
         if (!result.Succeeded)
+        {
             return Results.ValidationProblem(
                 result.Errors
                     .GroupBy(x => x.Code)
                     .ToDictionary(
                         x => x.Key,
                         x => x.Select(e => e.Description).ToArray()));
+        }
 
         var roleResult = await users.AddToRoleAsync(
-            user, "Customer");
+            user,
+            "Customer");
 
         if (!roleResult.Succeeded)
+        {
             return Results.Problem(
                 title: "Account role assignment failed",
                 statusCode: 500);
+        }
 
         return Results.Created(
             "/api/auth/me",
-            new { user.Id, user.Email });
+            new
+            {
+                user.Id,
+                user.Email
+            });
     })
     .RequireRateLimiting("auth");
 
-// Login: ASP.NET Core Identity bearer token
+// Login: ASP.NET Core Identity bearer token.
 app.MapPost("/api/auth/login",
     async (LoginRequest request,
         SignInManager<ApplicationUser> signIn) =>
     {
         if (string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password))
+        {
             return Results.Unauthorized();
+        }
 
         signIn.AuthenticationScheme =
             IdentityConstants.BearerScheme;
@@ -252,24 +282,29 @@ app.MapPost("/api/auth/login",
     })
     .RequireRateLimiting("auth");
 
+// Current authenticated user, including actual Identity roles.
 app.MapGet("/api/auth/me",
     async (System.Security.Claims.ClaimsPrincipal principal,
         UserManager<ApplicationUser> users) =>
     {
         var user = await users.GetUserAsync(principal);
 
-        return user is null
-            ? Results.Unauthorized()
-            : Results.Ok(new
-            {
-                user.Id,
-                user.FullName,
-                user.Email
-            });
+        if (user is null)
+            return Results.Unauthorized();
+
+        var roles = await users.GetRolesAsync(user);
+
+        return Results.Ok(new
+        {
+            user.Id,
+            user.FullName,
+            user.Email,
+            Roles = roles
+        });
     })
     .RequireAuthorization();
 
-// Public content
+// Public content.
 var publicApi = app.MapGroup("/api/public");
 
 publicApi.MapGet("/site",
@@ -284,7 +319,7 @@ publicApi.MapGet("/activities",
     async (IContentService service) =>
         Results.Ok(await service.GetActivitiesAsync()));
 
-// Admin content management
+// Admin content management.
 var adminApi = app.MapGroup("/api/admin")
     .RequireAuthorization("AdminOnly");
 
@@ -308,10 +343,13 @@ adminApi.MapPut("/site",
             request.Email.Length > 254 ||
             request.WhatsApp is null ||
             request.WhatsApp.Length > 50)
+        {
             return Results.BadRequest(
                 new { error = "Invalid site information." });
+        }
 
-        return Results.Ok(await service.UpdateSiteAsync(request));
+        return Results.Ok(
+            await service.UpdateSiteAsync(request));
     });
 
 adminApi.MapGet("/dive-sites",
@@ -327,13 +365,16 @@ adminApi.MapPost("/dive-sites",
             request.Description is null ||
             request.Description.Length > 4000 ||
             request.MaximumDepthMeters is < 0 or > 400)
+        {
             return Results.BadRequest(
                 new { error = "Invalid dive site." });
+        }
 
         var created = await service.CreateDiveSiteAsync(request);
 
         return Results.Created(
-            $"/api/admin/dive-sites/{created.Id}", created);
+            $"/api/admin/dive-sites/{created.Id}",
+            created);
     });
 
 adminApi.MapGet("/activities",
@@ -354,24 +395,50 @@ adminApi.MapPost("/activities",
             request.Currency is null ||
             !new[] { "TRY", "EUR", "USD", "GBP" }
                 .Contains(request.Currency.Trim().ToUpperInvariant()))
+        {
             return Results.BadRequest(
                 new { error = "Invalid activity." });
+        }
 
         var created = await service.CreateActivityAsync(request);
 
         return Results.Created(
-            $"/api/admin/activities/{created.Id}", created);
+            $"/api/admin/activities/{created.Id}",
+            created);
     });
 
-DiveHub.Api.AdminDiveSiteEndpoints.MapAdminDiveSiteEndpoints(app);
-DiveHub.Api.DiveSitePhotoEndpoints.MapDiveSitePhotoEndpoints(app);
-DiveHub.Api.ActivityCatalogEndpoints.MapActivityCatalogEndpoints(app);
-DiveHub.Api.ActivityPhotoEndpoints.MapActivityPhotoEndpoints(app);
-DiveHub.Api.OperationsCatalogEndpoints.MapOperationsCatalogEndpoints(app);
-DiveHub.Api.InstructorPhotoEndpoints.MapInstructorPhotoEndpoints(app);
-DiveHub.Api.ReservationEndpoints.MapReservationEndpoints(app);
-DiveHub.Api.BookableActivityEndpoints.MapBookableActivityEndpoints(app);
-DiveHub.Api.ReservationDashboardEndpoints.MapReservationDashboardEndpoints(app);
-DiveHub.Api.ReservationResourceEndpoints.MapReservationResourceEndpoints(app);
-DiveHub.Api.ActivityBoatRequirementEndpoints.MapActivityBoatRequirementEndpoints(app);
+// Existing application endpoints.
+DiveHub.Api.AdminDiveSiteEndpoints
+    .MapAdminDiveSiteEndpoints(app);
+
+DiveHub.Api.DiveSitePhotoEndpoints
+    .MapDiveSitePhotoEndpoints(app);
+
+DiveHub.Api.ActivityCatalogEndpoints
+    .MapActivityCatalogEndpoints(app);
+
+DiveHub.Api.ActivityPhotoEndpoints
+    .MapActivityPhotoEndpoints(app);
+
+DiveHub.Api.OperationsCatalogEndpoints
+    .MapOperationsCatalogEndpoints(app);
+
+DiveHub.Api.InstructorPhotoEndpoints
+    .MapInstructorPhotoEndpoints(app);
+
+DiveHub.Api.ReservationEndpoints
+    .MapReservationEndpoints(app);
+
+DiveHub.Api.BookableActivityEndpoints
+    .MapBookableActivityEndpoints(app);
+
+DiveHub.Api.ReservationDashboardEndpoints
+    .MapReservationDashboardEndpoints(app);
+
+DiveHub.Api.ReservationResourceEndpoints
+    .MapReservationResourceEndpoints(app);
+
+DiveHub.Api.ActivityBoatRequirementEndpoints
+    .MapActivityBoatRequirementEndpoints(app);
+
 app.Run();
