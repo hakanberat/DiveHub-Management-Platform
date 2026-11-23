@@ -1,0 +1,163 @@
+
+@using Microsoft.AspNetCore.Authentication
+
+@inject IHttpContextAccessor RequestContext
+@inject ActivityPhotoApiClient Api
+
+<section class="dive-photo-section">
+
+    <h3>Photo Gallery</h3>
+
+    @if (LoadError)
+    {
+        <div class="notice error">
+            Photos could not be loaded.
+        </div>
+    }
+    else
+    {
+        @if (Photos.Count == 0)
+        {
+            <p class="dive-photo-empty">
+                No photos uploaded yet.
+            </p>
+        }
+        else
+        {
+            <div class="dive-photo-grid">
+
+                @foreach (var photo in Photos)
+                {
+                    <div class="dive-photo-item">
+
+                        <img src="@($"/admin/media/activities/{ActivityId}/{photo.Id}")"
+                             alt="@photo.AltText"
+                             loading="lazy" />
+
+                        <p class="dive-photo-caption">
+                            @photo.AltText
+                        </p>
+
+                        <form method="post"
+                              action="@($"/admin/activity-catalog/{ActivityId}/photos/{photo.Id}/delete")">
+
+                            <CsrfField />
+
+                            <input type="hidden"
+                                   name="ReturnTo"
+                                   value="@ReturnTo" />
+
+                            <button type="submit"
+                                    class="btn btn-secondary">
+                                Delete Photo
+                            </button>
+
+                        </form>
+
+                    </div>
+                }
+
+            </div>
+        }
+
+        @if (Photos.Count < 20)
+        {
+            <form method="post"
+                  action="@($"/admin/activity-catalog/{ActivityId}/photos")"
+                  enctype="multipart/form-data"
+                  class="admin-form">
+
+                <CsrfField />
+
+                <input type="hidden"
+                       name="ReturnTo"
+                       value="@ReturnTo" />
+
+                <div class="form-field">
+                    <label>Upload Photo</label>
+
+                    <input type="file"
+                           name="Photo"
+                           accept=".jpg,.jpeg,.png,.webp"
+                           required />
+                </div>
+
+                <div class="form-field">
+                    <label>Photo Description</label>
+
+                    <input name="AltText"
+                           maxlength="300"
+                           placeholder="Describe this photo"
+                           required />
+                </div>
+
+                <p class="photo-help">
+                    JPEG, PNG or WebP. Maximum 5 MB.
+                    @Photos.Count / 20 photos.
+                </p>
+
+                <button type="submit"
+                        class="btn btn-primary">
+                    Upload Photo
+                </button>
+
+            </form>
+        }
+        else
+        {
+            <p class="photo-help">
+                Maximum number of photos reached.
+            </p>
+        }
+    }
+
+</section>
+
+@code {
+    [Parameter]
+    public int ActivityId { get; set; }
+
+    [Parameter]
+    public string ReturnTo { get; set; } = "diving-activities";
+
+    private IReadOnlyList<ActivityPhotoDto> Photos = [];
+
+    private bool LoadError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        LoadError = false;
+        Photos = [];
+
+        var context = RequestContext.HttpContext;
+
+        if (context is null)
+        {
+            LoadError = true;
+            return;
+        }
+
+        var token = await context.GetTokenAsync(
+            "DiveHubWeb", "access_token");
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            LoadError = true;
+            return;
+        }
+
+        try
+        {
+            Photos = await Api.GetAdminAsync(
+                token, ActivityId);
+        }
+        catch (HttpRequestException)
+        {
+            LoadError = true;
+        }
+        catch (TaskCanceledException)
+        {
+            LoadError = true;
+        }
+    }
+}

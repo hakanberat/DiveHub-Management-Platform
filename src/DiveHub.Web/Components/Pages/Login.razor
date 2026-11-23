@@ -1,0 +1,85 @@
+﻿
+@page "/login"
+
+<PageTitle>Admin Login | Dive Hub</PageTitle>
+
+<section class="auth-section">
+    <div class="auth-card">
+
+        <span class="eyebrow dark">DIVE HUB PLATFORM</span>
+
+        <h1>Welcome back.</h1>
+        <p>Sign in to manage your dive center.</p>
+
+        @if (!string.IsNullOrEmpty(Error))
+        {
+            <div class="notice error">
+                @switch (Error)
+                {
+                    case "invalid":
+                        <span>Invalid email or password.</span>
+                        break;
+
+                    case "access":
+                        <span>Administrator access is required.</span>
+                        break;
+
+                    case "expired":
+                        <span>Your session has expired. Sign in again.</span>
+                        break;
+
+                    case "server":
+                        <span>API unavailable. Check the server.</span>
+                        break;
+
+                    default:
+                        <span>Please sign in.</span>
+                        break;
+                }
+            </div>
+        }
+
+        <form method="post"
+              action="/account/login"
+              class="form-stack">
+
+            <CsrfField />
+
+            <div class="form-field">
+                <label for="email">Email address</label>
+                <input
+                    id="email"
+                    name="Email"
+                    type="email"
+                    autocomplete="username"
+                    maxlength="254"
+                    required />
+            </div>
+
+            <div class="form-field">
+                <label for="password">Password</label>
+                <input
+                    id="password"
+                    name="Password"
+                    type="password"
+                    autocomplete="current-password"
+                    required />
+            </div>
+
+            <button class="btn btn-primary btn-block"
+                    type="submit">
+                Sign In
+            </button>
+        </form>
+
+        <div class="auth-bottom">
+            <a href="/">&larr; Back to website</a>
+        </div>
+    </div>
+</section>
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+}
+

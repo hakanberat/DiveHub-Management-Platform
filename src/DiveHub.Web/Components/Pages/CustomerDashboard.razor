@@ -1,0 +1,251 @@
+@page "/account"
+
+@attribute [Authorize(Roles = "Customer")]
+
+@using System.Globalization
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authorization
+@using DiveHub.Domain
+@using DiveHub.Web.Services
+
+@inject IHttpContextAccessor RequestContext
+@inject CustomerBookingApiClient BookingApi
+
+<PageTitle>My Account | Dive Hub</PageTitle>
+
+<section class="booking-page">
+    <div class="container">
+
+        <div class="booking-heading">
+
+            <span class="eyebrow dark">
+                CUSTOMER DASHBOARD
+            </span>
+
+            <h1>My Account</h1>
+
+            <p>
+                Welcome, @DisplayName.
+                Manage your diving experiences
+                and training reservations.
+            </p>
+
+        </div>
+
+        <div class="reservation-stats">
+
+            <div class="reservation-stat">
+                <span>Total Reservations</span>
+
+                <strong>
+                    @Reservations.Count
+                </strong>
+            </div>
+
+            <div class="reservation-stat">
+                <span>Pending</span>
+
+                <strong>
+                    @Reservations.Count(
+                        x => x.Status == ReservationStatus.Pending)
+                </strong>
+            </div>
+
+            <div class="reservation-stat">
+                <span>Confirmed</span>
+
+                <strong>
+                    @Reservations.Count(
+                        x => x.Status == ReservationStatus.Confirmed)
+                </strong>
+            </div>
+
+        </div>
+
+        <div class="booking-card">
+
+            <h2>Quick Actions</h2>
+
+            <div class="form-actions">
+
+                <a href="/book"
+                   class="btn btn-primary">
+                    New Booking
+                </a>
+
+                <a href="/my-reservations"
+                   class="btn btn-secondary">
+                    My Reservations
+                </a>
+
+            </div>
+
+        </div>
+
+        <div class="booking-card">
+
+            <h2>Recent Reservations</h2>
+
+            @if (LoadError)
+            {
+                <div class="notice error" role="alert">
+                    Your reservations could not be loaded.
+                    Check your session or API connection.
+                </div>
+            }
+            else if (Reservations.Count == 0)
+            {
+                <div class="empty-state">
+
+                    <h3>No reservations yet</h3>
+
+                    <p>
+                        You have not submitted
+                        any reservations.
+                    </p>
+
+                    <a href="/book"
+                       class="btn btn-primary">
+                        Book Your First Experience
+                    </a>
+
+                </div>
+            }
+            else
+            {
+                <div class="reservation-list">
+
+                    @foreach (var reservation in Reservations
+                        .OrderByDescending(x => x.CreatedAtUtc)
+                        .Take(5))
+                    {
+                        <article class="reservation-card">
+
+                            <div class="reservation-card-header">
+
+                                <div>
+
+                                    <span class="reservation-number">
+                                        Booking #@reservation.Id
+                                    </span>
+
+                                    <h3>@reservation.ActivityName</h3>
+
+                                    <p>
+                                        @reservation.ActivityDate.ToString(
+                                            "dd MMM yyyy",
+                                            CultureInfo.InvariantCulture)
+
+                                        · @reservation.ParticipantCount
+                                        participant(s)
+                                    </p>
+
+                                </div>
+
+                                <span class="@GetStatusClass(
+                                    reservation.Status)">
+                                    @reservation.Status
+                                </span>
+
+                            </div>
+
+                            <div class="reservation-details">
+
+                                <div>
+                                    <span>Total Price</span>
+
+                                    <strong>
+                                        @reservation.TotalPrice.ToString(
+                                            "N2",
+                                            CultureInfo.InvariantCulture)
+                                        @reservation.Currency
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <span>Payment Status</span>
+
+                                    <strong>
+                                        @reservation.PaymentStatus
+                                    </strong>
+                                </div>
+
+                            </div>
+
+                        </article>
+                    }
+
+                </div>
+
+                <div class="form-actions">
+
+                    <a href="/my-reservations"
+                       class="btn btn-secondary">
+                        View All Reservations
+                    </a>
+
+                </div>
+            }
+
+        </div>
+
+    </div>
+</section>
+
+@code {
+    private IReadOnlyList<CustomerReservationItem> Reservations = [];
+
+    private bool LoadError;
+
+    private string DisplayName =>
+        RequestContext.HttpContext?.User.Identity?.Name
+        ?? "Customer";
+
+    private static string GetStatusClass(
+        ReservationStatus status)
+    {
+        return "reservation-status status-" +
+            status.ToString().ToLowerInvariant();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Reservations = [];
+        LoadError = false;
+
+        var context = RequestContext.HttpContext;
+
+        if (context is null)
+        {
+            LoadError = true;
+            return;
+        }
+
+        var token = await context.GetTokenAsync(
+            "DiveHubWeb",
+            "access_token");
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            LoadError = true;
+            return;
+        }
+
+        try
+        {
+            Reservations = await BookingApi.GetMineAsync(token);
+        }
+        catch (HttpRequestException)
+        {
+            LoadError = true;
+        }
+        catch (TaskCanceledException)
+        {
+            LoadError = true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            LoadError = true;
+        }
+    }
+}

@@ -1,0 +1,387 @@
+
+@page "/admin/dive-sites"
+@attribute [Authorize(Roles = "Admin")]
+
+@using Microsoft.AspNetCore.Authentication
+
+@inject IHttpContextAccessor RequestContext
+@inject AdminDiveSiteApiClient Api
+@inject DiveSitePhotoApiClient PhotoApi
+
+<PageTitle>Dive Sites Management | Dive Hub</PageTitle>
+
+<section class="admin-page">
+    <div class="container">
+
+        <div class="admin-heading">
+            <div>
+                <span class="eyebrow dark">CONTENT MANAGEMENT</span>
+                <h1>Dive Sites</h1>
+                <p>Manage dive sites and their photo galleries.</p>
+            </div>
+
+            <a class="btn btn-secondary" href="/admin">
+                Back to Dashboard
+            </a>
+        </div>
+
+        @if (Status == "saved" || Status == "photo-saved")
+        {
+            <div class="notice success">
+                Changes saved successfully.
+            </div>
+        }
+        else if (Status == "photo-deleted")
+        {
+            <div class="notice success">
+                Photo deleted successfully.
+            </div>
+        }
+        else if (Status == "limit")
+        {
+            <div class="notice error">
+                Maximum 20 photos per dive site.
+            </div>
+        }
+        else if (Status == "invalid")
+        {
+            <div class="notice error">
+                Invalid information or unsupported photo.
+                Check the fields and file size.
+            </div>
+        }
+        else if (Status == "error" || Status == "notfound")
+        {
+            <div class="notice error">
+                The operation could not be completed.
+            </div>
+        }
+
+        @if (LoadError)
+        {
+            <div class="notice error">
+                Could not load dive sites.
+                Check the API and your login session.
+            </div>
+        }
+        else
+        {
+            <div class="admin-grid">
+
+                <AdminSidebar Active="dive-sites" />
+
+                <div class="admin-main">
+
+                    <div class="panel-header">
+                        <h2>Add New Dive Site</h2>
+                        <p>Create an underwater destination.</p>
+                    </div>
+
+                    <form method="post"
+                          action="/admin/dive-sites/create"
+                          class="admin-form">
+
+                        <CsrfField />
+
+                        <div class="form-field">
+                            <label for="new-name">
+                                Dive Site Name
+                            </label>
+
+                            <input id="new-name"
+                                   name="Name"
+                                   maxlength="160"
+                                   placeholder="e.g. Ray Cave"
+                                   required />
+                        </div>
+
+                        <div class="form-field">
+                            <label for="new-description">
+                                Description
+                            </label>
+
+                            <textarea id="new-description"
+                                      name="Description"
+                                      maxlength="4000"
+                                      rows="4"></textarea>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="new-depth">
+                                Maximum Depth (meters)
+                            </label>
+
+                            <input id="new-depth"
+                                   name="MaximumDepthMeters"
+                                   type="number"
+                                   min="1"
+                                   max="400" />
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit"
+                                    class="btn btn-primary">
+                                Create Dive Site
+                            </button>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+
+            <div class="section-heading"
+                 style="margin-top:55px">
+
+                <span class="eyebrow dark">
+                    DIVE SITE CATALOG
+                </span>
+
+                <h2>Manage Existing Locations</h2>
+
+                <p>@Sites.Count dive site(s)</p>
+            </div>
+
+            @if (Sites.Count == 0)
+            {
+                <div class="empty-state">
+                    <h2>No dive sites yet.</h2>
+                    <p>Create your first dive site above.</p>
+                </div>
+            }
+            else
+            {
+                <div class="content-grid">
+
+                    @foreach (var site in Sites)
+                    {
+                        <article class="content-card">
+
+                            <span class="card-label">
+                                @(site.IsPublished
+                                    ? "PUBLISHED"
+                                    : "DRAFT")
+                            </span>
+
+                            <h2>@site.Name</h2>
+
+                            <!-- EDIT DIVE SITE -->
+
+                            <form method="post"
+                                  action="@($"/admin/dive-sites/{site.Id}/update")"
+                                  class="admin-form">
+
+                                <CsrfField />
+
+                                <div class="form-field">
+                                    <label>Name</label>
+
+                                    <input name="Name"
+                                           value="@site.Name"
+                                           maxlength="160"
+                                           required />
+                                </div>
+
+                                <div class="form-field">
+                                    <label>Description</label>
+
+                                    <textarea name="Description"
+                                              rows="4"
+                                              maxlength="4000">@site.Description</textarea>
+                                </div>
+
+                                <div class="form-field">
+                                    <label>Maximum Depth (m)</label>
+
+                                    <input name="MaximumDepthMeters"
+                                           type="number"
+                                           min="1"
+                                           max="400"
+                                           value="@site.MaximumDepthMeters" />
+                                </div>
+
+                                <button class="btn btn-secondary"
+                                        type="submit">
+                                    Save Changes
+                                </button>
+
+                            </form>
+
+                            <!-- PHOTO GALLERY -->
+
+                            <div class="dive-photo-section">
+
+                                <h3>Photo Gallery</h3>
+
+                                @if (Photos.TryGetValue(
+                                    site.Id, out var photoList)
+                                    && photoList.Count > 0)
+                                {
+                                    <div class="dive-photo-grid">
+
+                                        @foreach (var photo in photoList)
+                                        {
+                                            <div class="dive-photo-item">
+
+                                                <img src="@($"/admin/media/dive-sites/{site.Id}/{photo.Id}")"
+                                                     alt="@photo.AltText"
+                                                     loading="lazy" />
+
+                                                <p class="dive-photo-caption">
+                                                    @photo.AltText
+                                                </p>
+
+                                                <form method="post"
+                                                      action="@($"/admin/dive-sites/{site.Id}/photos/{photo.Id}/delete")">
+
+                                                    <CsrfField />
+
+                                                    <button type="submit"
+                                                            class="btn btn-secondary">
+                                                        Delete Photo
+                                                    </button>
+                                                </form>
+
+                                            </div>
+                                        }
+
+                                    </div>
+                                }
+                                else
+                                {
+                                    <p class="dive-photo-empty">
+                                        No photos uploaded.
+                                    </p>
+                                }
+
+                                <!-- UPLOAD PHOTO -->
+
+                                <form method="post"
+                                      action="@($"/admin/dive-sites/{site.Id}/photos")"
+                                      enctype="multipart/form-data"
+                                      class="admin-form">
+
+                                    <CsrfField />
+
+                                    <div class="form-field">
+                                        <label>
+                                            Upload Photo
+                                        </label>
+
+                                        <input type="file"
+                                               name="Photo"
+                                               accept=".jpg,.jpeg,.png,.webp"
+                                               required />
+                                    </div>
+
+                                    <div class="form-field">
+                                        <label>
+                                            Photo Description
+                                        </label>
+
+                                        <input name="AltText"
+                                               maxlength="300"
+                                               placeholder="Describe the photo"
+                                               required />
+                                    </div>
+
+                                    <p class="photo-help">
+                                        JPEG, PNG or WebP.
+                                        Maximum 5 MB.
+                                    </p>
+
+                                    <button class="btn btn-primary"
+                                            type="submit">
+                                        Upload Photo
+                                    </button>
+
+                                </form>
+
+                            </div>
+
+                            <!-- PUBLICATION -->
+
+                            <div class="card-footer">
+
+                                <form method="post"
+                                      action="@($"/admin/dive-sites/{site.Id}/publication")">
+
+                                    <CsrfField />
+
+                                    <input type="hidden"
+                                           name="IsPublished"
+                                           value="@(site.IsPublished ? "false" : "true")" />
+
+                                    <button type="submit"
+                                            class="btn btn-primary">
+
+                                        @(site.IsPublished
+                                            ? "Unpublish"
+                                            : "Publish")
+
+                                    </button>
+
+                                </form>
+
+                            </div>
+
+                        </article>
+                    }
+
+                </div>
+            }
+        }
+
+    </div>
+</section>
+
+@code {
+    private IReadOnlyList<DiveSite> Sites = [];
+
+    private Dictionary<int, IReadOnlyList<DiveSitePhotoDto>>
+        Photos = new();
+
+    private bool LoadError;
+
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? Status { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var context = RequestContext.HttpContext;
+
+        if (context is null)
+        {
+            LoadError = true;
+            return;
+        }
+
+        var token = await context.GetTokenAsync(
+            "DiveHubWeb", "access_token");
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            LoadError = true;
+            return;
+        }
+
+        try
+        {
+            Sites = await Api.ListAsync(token);
+
+            foreach (var site in Sites)
+            {
+                Photos[site.Id] =
+                    await PhotoApi.GetAdminAsync(
+                        token, site.Id);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            LoadError = true;
+        }
+        catch (TaskCanceledException)
+        {
+            LoadError = true;
+        }
+    }
+}

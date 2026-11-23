@@ -1,0 +1,198 @@
+@page "/dive-sites"
+
+@inject DiveHubApiClient Api
+@inject DiveSitePhotoApiClient PhotoApi
+
+<PageTitle>Dive Sites | Dive Hub</PageTitle>
+
+<section class="page-header">
+    <div class="container">
+
+        <span class="eyebrow">
+            UNDERWATER DESTINATIONS
+        </span>
+
+        <h1>Dive Sites</h1>
+
+        <p>Explore our diving locations.</p>
+
+    </div>
+</section>
+
+<section class="container section">
+
+    @if (LoadError)
+    {
+        <div class="notice error">
+            Dive sites could not be loaded.
+        </div>
+    }
+    else if (Sites.Count == 0)
+    {
+        <div class="empty-state">
+
+            <h2>No dive sites published yet.</h2>
+
+            <p>New locations will appear here when published.</p>
+
+        </div>
+    }
+    else
+    {
+        <div class="activity-catalog-grid">
+
+            @foreach (var site in Sites)
+            {
+                <article class="content-card activity-card"
+                         @key="site.Id">
+
+                    @if (PhotoLoadErrors.Contains(site.Id))
+                    {
+                        <div class="activity-gallery-empty">
+                            Photos could not be loaded.
+                        </div>
+                    }
+                    else if (Photos.TryGetValue(site.Id, out var photoList) &&
+                             photoList.Count > 0)
+                    {
+                        <div class="activity-gallery">
+
+                            @foreach (var photo in photoList)
+                            {
+                                <img @key="photo.Id"
+                                     src="@($"/media/dive-sites/{site.Id}/{photo.Id}")"
+                                     alt="@photo.AltText"
+                                     loading="lazy" />
+                            }
+
+                        </div>
+
+                        @if (photoList.Count > 1)
+                        {
+                            <p class="activity-gallery-hint">
+                                Scroll to view all @photoList.Count photos.
+                            </p>
+                        }
+                    }
+                    else
+                    {
+                        <div class="activity-gallery-empty">
+                            No photo available
+                        </div>
+                    }
+
+                    <span class="card-label">
+                        DIVE SITE
+                    </span>
+
+                    <h2>@site.Name</h2>
+
+                    <p class="activity-summary">
+                        @GetSummary(site.Description)
+                    </p>
+
+                    <dl class="activity-facts">
+
+                        <div>
+
+                            <dt>Maximum depth</dt>
+
+                            <dd>
+                                @(site.MaximumDepthMeters.HasValue
+                                    ? $"{site.MaximumDepthMeters.Value} m"
+                                    : "Not specified")
+                            </dd>
+
+                        </div>
+
+                    </dl>
+
+                    @if (!string.IsNullOrWhiteSpace(site.Description) &&
+                         site.Description.Length > 160)
+                    {
+                        <details>
+
+                            <summary>Full Details</summary>
+
+                            <p class="catalog-description">@site.Description</p>
+
+                        </details>
+                    }
+
+                </article>
+            }
+
+        </div>
+    }
+
+</section>
+
+@code {
+    private IReadOnlyList<DiveSite> Sites = [];
+
+    private Dictionary<int, IReadOnlyList<DiveSitePhotoDto>>
+        Photos = new();
+
+    private HashSet<int> PhotoLoadErrors = new();
+
+    private bool LoadError;
+
+    private static string GetSummary(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            return "";
+
+        return description.Length <= 160
+            ? description
+            : description[..160] + "...";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LoadError = false;
+        Sites = [];
+        Photos.Clear();
+        PhotoLoadErrors.Clear();
+
+        try
+        {
+            Sites = await Api.GetDiveSitesAsync();
+        }
+        catch (HttpRequestException)
+        {
+            LoadError = true;
+            return;
+        }
+        catch (TaskCanceledException)
+        {
+            LoadError = true;
+            return;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            LoadError = true;
+            return;
+        }
+
+        foreach (var site in Sites)
+        {
+            try
+            {
+                Photos[site.Id] =
+                    await PhotoApi.GetPublicAsync(site.Id);
+            }
+            catch (HttpRequestException)
+            {
+                PhotoLoadErrors.Add(site.Id);
+            }
+            catch (TaskCanceledException)
+            {
+                PhotoLoadErrors.Add(site.Id);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                PhotoLoadErrors.Add(site.Id);
+            }
+        }
+    }
+}

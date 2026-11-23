@@ -1,0 +1,558 @@
+@page "/admin/boats"
+@page "/admin/instructors"
+
+@attribute [Authorize(Roles = "Admin")]
+
+@using Microsoft.AspNetCore.Authentication
+
+@inject NavigationManager Navigation
+@inject IHttpContextAccessor RequestContext
+@inject OperationsCatalogApiClient Api
+
+<PageTitle>@PageHeading | Dive Hub</PageTitle>
+
+<section class="admin-page">
+    <div class="container">
+
+        <div class="admin-heading">
+
+            <div>
+                <span class="eyebrow dark">OPERATIONS MANAGEMENT</span>
+
+                <h1>@PageHeading</h1>
+
+                <p>
+                    @(IsBoatPage
+                        ? "Manage your fleet and boat capacities."
+                        : "Manage your diving team and instructor profiles.")
+                </p>
+            </div>
+
+            <a class="btn btn-secondary" href="/admin">
+                Back to Dashboard
+            </a>
+
+        </div>
+
+        @if (Status == "saved")
+        {
+            <div class="notice success">
+                Changes saved successfully.
+            </div>
+        }
+        else if (Status == "invalid")
+        {
+            <div class="notice error">
+                Invalid information. Check the form fields.
+            </div>
+        }
+        else if (Status == "notfound")
+        {
+            <div class="notice error">
+                The requested record was not found.
+            </div>
+        }
+        else if (Status == "error")
+        {
+            <div class="notice error">
+                Operation failed. Check the API connection.
+            </div>
+        }
+
+        @if (LoadError)
+        {
+            <div class="notice error">
+                Could not load records.
+                Check your login session and API.
+            </div>
+        }
+        else
+        {
+            <div class="admin-grid">
+
+                <AdminSidebar Active="@(IsBoatPage ? "boats" : "instructors")" />
+
+                <div class="admin-main">
+
+                    @if (IsBoatPage)
+                    {
+                        <div class="panel-header">
+                            <h2>Add New Boat</h2>
+                            <p>Register a boat and its passenger capacity.</p>
+                        </div>
+
+                        <form method="post"
+                              action="/admin/operations/boats/create"
+                              class="admin-form">
+
+                            <CsrfField />
+
+                            <div class="form-field">
+
+                                <label for="boat-name">
+                                    Boat Name
+                                </label>
+
+                                <input id="boat-name"
+                                       name="Name"
+                                       maxlength="100"
+                                       placeholder="Enter boat name"
+                                       required />
+
+                            </div>
+
+                            <div class="form-field">
+
+                                <label for="boat-capacity">
+                                    Passenger Capacity
+                                </label>
+
+                                <input id="boat-capacity"
+                                       name="Capacity"
+                                       type="number"
+                                       min="1"
+                                       max="250"
+                                       required />
+
+                            </div>
+
+                            <div class="form-actions">
+                                <button class="btn btn-primary"
+                                        type="submit">
+
+                                    Create Boat
+
+                                </button>
+                            </div>
+
+                        </form>
+                    }
+                    else
+                    {
+                        <div class="panel-header">
+                            <h2>Add New Instructor</h2>
+
+                            <p>
+                                Register an instructor and certification details.
+                            </p>
+                        </div>
+
+                        <form method="post"
+                              action="/admin/operations/instructors/create"
+                              class="admin-form">
+
+                            <CsrfField />
+
+                            <div class="form-field">
+
+                                <label for="instructor-name">
+                                    Full Name
+                                </label>
+
+                                <input id="instructor-name"
+                                       name="FullName"
+                                       maxlength="120"
+                                       required />
+
+                            </div>
+
+                            <div class="form-field">
+
+                                <label for="instructor-agency">
+                                    Certification Agency
+                                </label>
+
+                                <input id="instructor-agency"
+                                       name="CertificationAgency"
+                                       maxlength="100"
+                                       placeholder="e.g. PADI" />
+
+                            </div>
+
+                            <div class="form-field">
+
+                                <label for="instructor-number">
+                                    Certification Number
+                                </label>
+
+                                <input id="instructor-number"
+                                       name="CertificationNumber"
+                                       maxlength="100" />
+
+                            </div>
+
+                            <div class="form-field">
+
+                                <label for="instructor-bio">
+                                    Biography
+                                </label>
+
+                                <textarea id="instructor-bio"
+                                          name="Biography"
+                                          maxlength="1500"
+                                          rows="5"></textarea>
+
+                            </div>
+
+                            <div class="form-actions">
+
+                                <button class="btn btn-primary"
+                                        type="submit">
+
+                                    Create Instructor
+
+                                </button>
+
+                            </div>
+
+                        </form>
+                    }
+
+                </div>
+
+            </div>
+
+            <div class="section-heading catalog-section-heading">
+
+                <span class="eyebrow dark">
+
+                    @(IsBoatPage
+                        ? "FLEET MANAGEMENT"
+                        : "INSTRUCTOR MANAGEMENT")
+
+                </span>
+
+                <h2>Manage Existing @PageHeading</h2>
+
+                <p>
+                    @(IsBoatPage
+                        ? $"{BoatItems.Count} registered boat(s)"
+                        : $"{InstructorItems.Count} instructor profile(s)")
+                </p>
+
+            </div>
+
+            @if (IsBoatPage)
+            {
+                @if (BoatItems.Count == 0)
+                {
+                    <div class="empty-state">
+
+                        <h2>No boats registered.</h2>
+
+                        <p>Create your first boat above.</p>
+
+                    </div>
+                }
+                else
+                {
+                    <div class="content-grid admin-catalog-list">
+
+                        @foreach (var boat in BoatItems)
+                        {
+                            <article class="content-card"
+                                     @key="boat.Id">
+
+                                <span class="card-label">
+
+                                    @(boat.IsActive
+                                        ? "ACTIVE"
+                                        : "INACTIVE")
+
+                                </span>
+
+                                <h2>@boat.Name</h2>
+
+                                <form method="post"
+                                      action="@($"/admin/operations/boats/{boat.Id}/update")"
+                                      class="admin-form">
+
+                                    <CsrfField />
+
+                                    <div class="form-field">
+
+                                        <label>Boat Name</label>
+
+                                        <input name="Name"
+                                               value="@boat.Name"
+                                               maxlength="100"
+                                               required />
+
+                                    </div>
+
+                                    <div class="form-field">
+
+                                        <label>Passenger Capacity</label>
+
+                                        <input name="Capacity"
+                                               value="@boat.Capacity"
+                                               type="number"
+                                               min="1"
+                                               max="250"
+                                               required />
+
+                                    </div>
+
+                                    <button class="btn btn-secondary"
+                                            type="submit">
+
+                                        Save Changes
+
+                                    </button>
+
+                                </form>
+
+                                <div class="card-footer">
+
+                                    <form method="post"
+                                          action="@($"/admin/operations/boats/{boat.Id}/active")">
+
+                                        <CsrfField />
+
+                                        <input type="hidden"
+                                               name="IsActive"
+                                               value="@(boat.IsActive ? "false" : "true")" />
+
+                                        <button class="btn btn-primary"
+                                                type="submit">
+
+                                            @(boat.IsActive
+                                                ? "Deactivate Boat"
+                                                : "Activate Boat")
+
+                                        </button>
+
+                                    </form>
+
+                                </div>
+
+                            </article>
+                        }
+
+                    </div>
+                }
+            }
+            else
+            {
+                @if (InstructorItems.Count == 0)
+                {
+                    <div class="empty-state">
+
+                        <h2>No instructors registered.</h2>
+
+                        <p>Create your first instructor above.</p>
+
+                    </div>
+                }
+                else
+                {
+                    <div class="content-grid admin-catalog-list">
+
+                        @foreach (var instructor in InstructorItems)
+                        {
+                            <article class="content-card"
+                                     @key="instructor.Id">
+
+                                <span class="card-label">
+
+                                    @(instructor.IsActive
+                                        ? "ACTIVE"
+                                        : "INACTIVE")
+
+                                    /
+
+                                    @(instructor.IsPublished
+                                        ? "PUBLISHED"
+                                        : "DRAFT")
+
+                                </span>
+
+                                <h2>@instructor.FullName</h2>
+
+                                <form method="post"
+                                      action="@($"/admin/operations/instructors/{instructor.Id}/update")"
+                                      class="admin-form">
+
+                                    <CsrfField />
+
+                                    <div class="form-field">
+
+                                        <label>Full Name</label>
+
+                                        <input name="FullName"
+                                               value="@instructor.FullName"
+                                               maxlength="120"
+                                               required />
+
+                                    </div>
+
+                                    <div class="form-field">
+
+                                        <label>Certification Agency</label>
+
+                                        <input name="CertificationAgency"
+                                               value="@instructor.CertificationAgency"
+                                               maxlength="100" />
+
+                                    </div>
+
+                                    <div class="form-field">
+
+                                        <label>Certification Number</label>
+
+                                        <input name="CertificationNumber"
+                                               value="@instructor.CertificationNumber"
+                                               maxlength="100" />
+
+                                    </div>
+
+                                    <div class="form-field">
+
+                                        <label>Biography</label>
+
+                                        <textarea name="Biography"
+                                                  maxlength="1500"
+                                                  rows="5">@instructor.Biography</textarea>
+
+                                    </div>
+
+                                    <button class="btn btn-secondary"
+                                            type="submit">
+
+                                        Save Changes
+
+                                    </button>
+
+                                </form>
+
+                                <InstructorPhotoManager
+                                    InstructorId="@instructor.Id" />
+
+                                <div class="card-footer">
+
+                                    <div class="catalog-card-actions">
+
+                                        <form method="post"
+                                              action="@($"/admin/operations/instructors/{instructor.Id}/active")">
+
+                                            <CsrfField />
+
+                                            <input type="hidden"
+                                                   name="IsActive"
+                                                   value="@(instructor.IsActive ? "false" : "true")" />
+
+                                            <button class="btn btn-secondary"
+                                                    type="submit">
+
+                                                @(instructor.IsActive
+                                                    ? "Deactivate"
+                                                    : "Activate")
+
+                                            </button>
+
+                                        </form>
+
+                                        <form method="post"
+                                              action="@($"/admin/operations/instructors/{instructor.Id}/publication")">
+
+                                            <CsrfField />
+
+                                            <input type="hidden"
+                                                   name="IsPublished"
+                                                   value="@(instructor.IsPublished ? "false" : "true")" />
+
+                                            <button class="btn btn-primary"
+                                                    type="submit">
+
+                                                @(instructor.IsPublished
+                                                    ? "Unpublish"
+                                                    : "Publish")
+
+                                            </button>
+
+                                        </form>
+
+                                    </div>
+
+                                </div>
+
+                            </article>
+                        }
+
+                    </div>
+                }
+            }
+        }
+
+    </div>
+</section>
+
+@code {
+    private IReadOnlyList<BoatItem> BoatItems = [];
+
+    private IReadOnlyList<InstructorItem> InstructorItems = [];
+
+    private bool LoadError;
+
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? Status { get; set; }
+
+    private bool IsBoatPage =>
+        string.Equals(
+            Navigation.ToAbsoluteUri(Navigation.Uri)
+                .AbsolutePath.TrimEnd('/'),
+            "/admin/boats",
+            StringComparison.OrdinalIgnoreCase);
+
+    private string PageHeading =>
+        IsBoatPage ? "Boats" : "Instructors";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        LoadError = false;
+        BoatItems = [];
+        InstructorItems = [];
+
+        var context = RequestContext.HttpContext;
+
+        if (context is null)
+        {
+            LoadError = true;
+            return;
+        }
+
+        var token = await context.GetTokenAsync(
+            "DiveHubWeb", "access_token");
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            LoadError = true;
+            return;
+        }
+
+        try
+        {
+            if (IsBoatPage)
+            {
+                BoatItems = await Api.GetBoatsAsync(token);
+            }
+            else
+            {
+                InstructorItems =
+                    await Api.GetInstructorsAsync(token);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            LoadError = true;
+        }
+        catch (TaskCanceledException)
+        {
+            LoadError = true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            LoadError = true;
+        }
+    }
+}

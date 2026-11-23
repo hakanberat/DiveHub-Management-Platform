@@ -1,0 +1,281 @@
+@page "/activities"
+@page "/activities/{Category}"
+
+@using System.Globalization
+
+@inject DiveHubApiClient Api
+
+<PageTitle>@PageHeading | Dive Hub</PageTitle>
+
+<section class="page-header">
+    <div class="container">
+
+        <span class="eyebrow">DIVE HUB EXPERIENCES</span>
+
+        <h1>@PageHeading</h1>
+
+        <p>@PageDescription</p>
+
+    </div>
+</section>
+
+<section class="container section">
+
+    @if (LoadError)
+    {
+        <div class="notice error">
+            Activities could not be loaded.
+        </div>
+    }
+    else if (!IsValidCategory)
+    {
+        <div class="empty-state">
+            <h2>Page not found.</h2>
+        </div>
+    }
+    else if (ActivityItems.Count == 0)
+    {
+        <div class="empty-state">
+            <h2>No @PageHeading.ToLowerInvariant() available yet.</h2>
+            <p>New experiences will appear here when published.</p>
+        </div>
+    }
+    else
+    {
+        <div class="activity-catalog-grid">
+
+            @foreach (var activity in ActivityItems)
+            {
+                <article class="content-card activity-card"
+                         @key="activity.Id">
+
+                    <ActivityPhotoGallery ActivityId="@activity.Id" />
+
+                    <span class="card-label">
+                        @(activity.Kind == ActivityKind.Course
+                            ? "DIVING COURSE"
+                            : "DIVING ACTIVITY")
+                    </span>
+
+                    <h2>@activity.Name</h2>
+
+                    @if (!string.IsNullOrWhiteSpace(activity.Category))
+                    {
+                        <p class="card-meta">@activity.Category</p>
+                    }
+
+                    <p class="activity-summary">
+                        @GetSummary(activity)
+                    </p>
+
+                    @if (!string.IsNullOrWhiteSpace(GetLocation(activity)))
+                    {
+                        <p class="card-meta">
+                            @GetLocation(activity)
+                        </p>
+                    }
+
+                    <dl class="activity-facts">
+
+                        <div>
+                            <dt>Duration</dt>
+                            <dd>
+                                @(string.IsNullOrWhiteSpace(activity.Duration)
+                                    ? "Contact us"
+                                    : activity.Duration)
+                            </dd>
+                        </div>
+
+                        <div>
+                            <dt>Max. participants</dt>
+                            <dd>@activity.MaxParticipants</dd>
+                        </div>
+
+                        <div>
+                            <dt>Minimum age</dt>
+                            <dd>
+                                @(activity.MinimumAge is > 0
+                                    ? $"{activity.MinimumAge} years"
+                                    : "Not specified")
+                            </dd>
+                        </div>
+
+                        <div>
+                            <dt>Certification</dt>
+                            <dd>
+                                @(string.IsNullOrWhiteSpace(
+                                    activity.MinimumCertification)
+                                    ? "Not specified"
+                                    : activity.MinimumCertification)
+                            </dd>
+                        </div>
+
+                        <div>
+                            <dt>Boat</dt>
+                            <dd>
+                                @(activity.RequiresBoat
+                                    ? "Required"
+                                    : "Optional")
+                            </dd>
+                        </div>
+
+                    </dl>
+
+                    <details>
+                        <summary>Full Details</summary>
+
+                        <p style="white-space: pre-line;">
+                            @activity.Description
+                        </p>
+
+                        @if (!string.IsNullOrWhiteSpace(activity.Included))
+                        {
+                            <h3>Included</h3>
+                            <p style="white-space: pre-line;">@activity.Included</p>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(activity.NotIncluded))
+                        {
+                            <h3>Not Included</h3>
+                            <p style="white-space: pre-line;">@activity.NotIncluded</p>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(activity.Requirements))
+                        {
+                            <h3>Requirements</h3>
+                            <p style="white-space: pre-line;">@activity.Requirements</p>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(activity.MapLocation) &&
+                            ActivityCatalogRules.IsValidMapUrl(activity.MapLocation))
+                        {
+                            <p>
+                                <a href="@activity.MapLocation"
+                                   target="_blank"
+                                   rel="noopener noreferrer">
+
+                                    View Location on Map
+
+                                </a>
+                            </p>
+                        }
+
+                    </details>
+
+                    <div class="card-footer">
+
+                        <strong>
+                            @activity.Price.ToString(
+                                "0.00",
+                                CultureInfo.InvariantCulture)
+                            @activity.Currency
+                            / person
+                        </strong>
+
+                        <a href="@($"/book/{activity.Id}")"
+                           class="btn btn-primary">
+
+                            Book Now
+
+                        </a>
+
+                    </div>
+
+                </article>
+            }
+
+        </div>
+    }
+
+</section>
+
+@code {
+    [Parameter]
+    public string? Category { get; set; }
+
+    private IReadOnlyList<Activity> ActivityItems = [];
+
+    private bool LoadError;
+
+    private bool IsCoursePage =>
+        string.Equals(
+            Category,
+            "courses",
+            StringComparison.OrdinalIgnoreCase);
+
+    private bool IsValidCategory =>
+        string.IsNullOrWhiteSpace(Category) ||
+        IsCoursePage ||
+        string.Equals(
+            Category,
+            "diving",
+            StringComparison.OrdinalIgnoreCase);
+
+    private string PageHeading =>
+        IsCoursePage ? "Courses" : "Diving Activities";
+
+    private string PageDescription =>
+        IsCoursePage
+            ? "Explore our scuba diving training courses."
+            : "Discover our underwater adventures.";
+
+    private static string GetSummary(Activity activity)
+    {
+        if (!string.IsNullOrWhiteSpace(activity.ShortDescription))
+            return activity.ShortDescription;
+
+        if (activity.Description.Length <= 160)
+            return activity.Description;
+
+        return activity.Description[..160] + "...";
+    }
+
+    private static string GetLocation(Activity activity)
+    {
+        return string.Join(", ",
+            new[]
+            {
+                activity.Location,
+                activity.City,
+                activity.Country
+            }.Where(x => !string.IsNullOrWhiteSpace(x)));
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        LoadError = false;
+        ActivityItems = [];
+
+        if (!IsValidCategory)
+            return;
+
+        try
+        {
+            var allActivities = await Api.GetActivitiesAsync();
+
+            var requiredKind = IsCoursePage
+                ? ActivityKind.Course
+                : ActivityKind.Dive;
+
+            ActivityItems = allActivities
+                .Where(x =>
+                    x.Kind == requiredKind &&
+                    ActivityCatalogRules.HasValidCapacity(
+                        x.MaxParticipants))
+                .OrderBy(x => x.Name)
+                .ToList();
+        }
+        catch (HttpRequestException)
+        {
+            LoadError = true;
+        }
+        catch (TaskCanceledException)
+        {
+            LoadError = true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            LoadError = true;
+        }
+    }
+}

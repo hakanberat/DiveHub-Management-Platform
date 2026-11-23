@@ -1,0 +1,33 @@
+﻿# Build outputs
+**/bin/
+**/obj/
+**/publish/
+.vs/
+.vscode/
+
+# Local settings and secrets
+appsettings*.json
+launchSettings.json
+.env
+.env.*
+secrets.json
+*.pfx
+*.p12
+*.pem
+*.key
+id_rsa
+
+# Database and backups
+*.db
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+*.bak
+
+# Logs and temporary files
+*.log
+*.tmp
+*.user
+*.suo
+TestResults/

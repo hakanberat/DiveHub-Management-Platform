@@ -1,0 +1,134 @@
+
+@using Microsoft.AspNetCore.Authentication
+
+@inject IHttpContextAccessor RequestContext
+@inject InstructorPhotoApiClient Api
+
+<section class="instructor-photo-manager">
+
+    <h4>Profile Photo</h4>
+
+    @if (LoadError)
+    {
+        <div class="notice error">
+            Profile photo could not be loaded.
+        </div>
+    }
+    else
+    {
+        @if (Photo is not null)
+        {
+            <div class="instructor-photo-preview">
+
+                <img src="@($"/admin/media/instructors/{InstructorId}")"
+                     alt="@Photo.AltText"
+                     loading="lazy" />
+
+                <form method="post"
+                      action="@($"/admin/operations/instructors/{InstructorId}/photo/delete")">
+
+                    <CsrfField />
+
+                    <button class="btn btn-secondary"
+                            type="submit">
+                        Delete Photo
+                    </button>
+
+                </form>
+
+            </div>
+        }
+        else
+        {
+            <p class="photo-help">
+                No profile photo uploaded.
+            </p>
+        }
+
+        <form method="post"
+              action="@($"/admin/operations/instructors/{InstructorId}/photo")"
+              enctype="multipart/form-data"
+              class="admin-form">
+
+            <CsrfField />
+
+            <div class="form-field">
+                <label>
+                    @(Photo is null
+                        ? "Upload Profile Photo"
+                        : "Replace Profile Photo")
+                </label>
+
+                <input type="file"
+                       name="Photo"
+                       accept=".jpg,.jpeg,.png,.webp"
+                       required />
+            </div>
+
+            <div class="form-field">
+                <label>Photo Description</label>
+
+                <input name="AltText"
+                       maxlength="300"
+                       placeholder="Instructor portrait"
+                       required />
+            </div>
+
+            <p class="photo-help">
+                JPEG, PNG or WebP. Maximum 5 MB.
+                One photo per instructor.
+            </p>
+
+            <button class="btn btn-primary"
+                    type="submit">
+                @(Photo is null
+                    ? "Upload Photo"
+                    : "Replace Photo")
+            </button>
+
+        </form>
+    }
+
+</section>
+
+@code {
+    [Parameter]
+    public int InstructorId { get; set; }
+
+    private InstructorPhotoDto? Photo;
+    private bool LoadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var context = RequestContext.HttpContext;
+
+        if (context is null)
+        {
+            LoadError = true;
+            return;
+        }
+
+        var token = await context.GetTokenAsync(
+            "DiveHubWeb", "access_token");
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            LoadError = true;
+            return;
+        }
+
+        try
+        {
+            Photo = await Api.GetAdminAsync(
+                token, InstructorId);
+        }
+        catch (HttpRequestException)
+        {
+            LoadError = true;
+        }
+        catch (TaskCanceledException)
+        {
+            LoadError = true;
+        }
+    }
+}

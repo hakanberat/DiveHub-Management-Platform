@@ -1,0 +1,515 @@
+/* ==================================================
+   PUBLIC CATALOG - DIVE SITES, ACTIVITIES, COURSES
+   ================================================== */
+
+.activity-catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 24px;
+}
+
+.activity-catalog-grid .activity-card {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 24px;
+}
+
+.activity-gallery {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex-shrink: 0;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    border-radius: 12px;
+    aspect-ratio: 16 / 10;
+    background: #e7eff3;
+    margin-bottom: 24px;
+}
+
+.activity-gallery img {
+    display: block;
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    scroll-snap-align: start;
+}
+
+.activity-gallery-empty {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    flex-shrink: 0;
+    aspect-ratio: 16 / 10;
+    border-radius: 12px;
+    background: #e7eff3;
+    color: #617887;
+    margin-bottom: 24px;
+    font-size: 0.9rem;
+}
+
+.activity-gallery-hint {
+    font-size: 0.8rem;
+    margin: -14px 0 18px;
+}
+
+.activity-card h2 {
+    margin: 12px 0;
+    overflow-wrap: anywhere;
+}
+
+.activity-card .activity-summary {
+    min-height: 52px;
+    margin: 12px 0;
+    overflow-wrap: anywhere;
+}
+
+.catalog-description {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.activity-facts {
+    display: grid;
+    gap: 0;
+    margin: 16px 0 24px;
+}
+
+.activity-facts > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+    padding: 11px 0;
+    border-bottom: 1px solid #e5edf2;
+}
+
+.activity-facts dt {
+    color: #617887;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.activity-facts dd {
+    text-align: right;
+    margin: 0;
+    font-weight: 700;
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+.activity-card details {
+    margin-bottom: 24px;
+}
+
+.activity-card details summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.activity-card .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: auto;
+    padding-top: 20px;
+}
+
+.activity-card .card-footer strong {
+    font-size: 1.2rem;
+}
+
+.activity-card .card-footer .btn {
+    flex-shrink: 0;
+}
+
+
+/* ==================================================
+   ADMIN CATALOG MANAGEMENT
+   ================================================== */
+
+.catalog-section-heading {
+    margin-top: 55px;
+    margin-bottom: 24px;
+}
+
+.content-grid.admin-catalog-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 24px;
+}
+
+.admin-catalog-list > .content-card {
+    min-width: 0;
+    padding: 28px;
+}
+
+.admin-catalog-list > .content-card:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.admin-catalog-list h2 {
+    margin-top: 12px;
+    overflow-wrap: anywhere;
+}
+
+.admin-catalog-list input,
+.admin-catalog-list select,
+.admin-catalog-list textarea {
+    max-width: 100%;
+    min-width: 0;
+}
+
+.catalog-create-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+    align-items: start;
+}
+
+.catalog-create-form > .form-field {
+    min-width: 0;
+}
+
+.catalog-create-form > .form-field:has(textarea),
+.catalog-create-form > h3,
+.catalog-create-form > .form-actions {
+    grid-column: 1 / -1;
+}
+
+.catalog-create-form > h3 {
+    margin: 10px 0 0;
+    padding-top: 20px;
+    border-top: 1px solid #dce6ec;
+    font-size: 1.1rem;
+}
+
+.catalog-card-facts {
+    display: grid;
+    gap: 0;
+    margin: 18px 0;
+}
+
+.catalog-card-facts > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    padding: 12px 0;
+    gap: 12px;
+    border-bottom: 1px solid #e5edf2;
+}
+
+.catalog-card-facts span {
+    font-size: 0.85rem;
+    color: #617887;
+}
+
+.catalog-card-facts strong {
+    text-align: right;
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+.catalog-edit {
+    margin-top: 20px;
+    border: 1px solid #dce6ec;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.catalog-edit summary {
+    padding: 14px 16px;
+    cursor: pointer;
+    font-weight: 700;
+    background: #f2f8fa;
+    color: #07536b;
+}
+
+.catalog-edit .admin-form {
+    padding: 18px;
+}
+
+.catalog-edit .admin-form h3 {
+    margin: 8px 0 0;
+    padding-top: 15px;
+    border-top: 1px solid #dce6ec;
+    font-size: 1rem;
+}
+
+.catalog-card-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.catalog-card-actions form {
+    margin: 0;
+}
+
+
+/* ==================================================
+   ADMIN RESERVATION CONTACT DETAILS
+   ================================================== */
+
+.reservation-card .reservation-notes:has(> p > strong) {
+    display: grid;
+    gap: 0;
+    padding: 20px;
+}
+
+.reservation-card .reservation-notes:has(> p > strong) > strong {
+    display: block;
+    margin-bottom: 14px;
+    font-size: 1rem;
+}
+
+.reservation-card .reservation-notes:has(> p > strong) > p {
+    display: grid;
+    grid-template-columns: minmax(125px, 170px) minmax(0, 1fr);
+    align-items: start;
+    gap: 14px;
+    padding: 10px 0;
+    margin: 0;
+    border-top: 1px solid #e1eaf0;
+    color: #102d40;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.reservation-card .reservation-notes:has(> p > strong) > p > strong {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.reservation-card .reservation-notes:has(> p > strong) a {
+    color: #007f9e;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+.reservation-card .reservation-notes:has(> p > strong) a:hover {
+    text-decoration: underline;
+}
+
+
+/* ==================================================
+   CUSTOMER NOTIFICATION MENU
+   ================================================== */
+
+.customer-notification-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.customer-notification-badge {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: #dc3545;
+    color: #ffffff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+
+/* ==================================================
+   CUSTOMER NOTIFICATION PAGE
+   ================================================== */
+
+.notification-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-bottom: 24px;
+}
+
+.notification-toolbar h2 {
+    margin: 0;
+}
+
+.notification-toolbar p {
+    margin: 6px 0 0;
+    color: #617887;
+}
+
+.notification-toolbar form {
+    margin: 0;
+}
+
+.notification-list {
+    display: grid;
+    gap: 18px;
+}
+
+.customer-notification-card {
+    border: 1px solid #dce6ec;
+    border-left: 4px solid #bdcbd4;
+    border-radius: 14px;
+    background: #fff;
+    padding: 24px;
+    margin: 0;
+    min-width: 0;
+}
+
+.customer-notification-unread {
+    border-left-color: #dc3545;
+    background: #f5faff;
+}
+
+.notification-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.notification-title-group {
+    min-width: 0;
+}
+
+.notification-title-group h3 {
+    margin: 0 0 12px;
+    font-size: 1.15rem;
+    overflow-wrap: anywhere;
+}
+
+.notification-labels {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.notification-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.notification-confirmed {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.notification-rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.notification-date {
+    color: #617887;
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.customer-notification-card .notification-message {
+    margin: 20px 0;
+    padding: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.6;
+    color: #102d40;
+}
+
+.notification-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid #dce6ec;
+}
+
+.notification-actions form {
+    margin: 0;
+}
+
+
+/* ==================================================
+   RESPONSIVE DESIGN
+   ================================================== */
+
+@media (max-width: 1100px) {
+    .activity-catalog-grid,
+    .content-grid.admin-catalog-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 700px) {
+    .activity-catalog-grid,
+    .content-grid.admin-catalog-list,
+    .catalog-create-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .admin-catalog-list > .content-card {
+        padding: 22px;
+    }
+
+    .catalog-section-heading {
+        margin-top: 35px;
+    }
+
+    .notification-card-header {
+        flex-direction: column;
+    }
+
+    .notification-date {
+        white-space: normal;
+    }
+}
+
+@media (max-width: 600px) {
+    .activity-catalog-grid .activity-card {
+        padding: 18px;
+    }
+
+    .activity-card .card-footer .btn {
+        width: 100%;
+        text-align: center;
+    }
+
+    .reservation-card .reservation-notes:has(> p > strong) > p {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 5px;
+    }
+
+    .notification-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .notification-actions .btn {
+        width: 100%;
+        text-align: center;
+    }
+
+    .customer-notification-card {
+        padding: 18px;
+    }
+}

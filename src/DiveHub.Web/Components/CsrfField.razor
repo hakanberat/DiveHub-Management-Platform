@@ -1,0 +1,8 @@
+﻿@inject IHttpContextAccessor RequestContext
+
+@if (RequestContext.HttpContext?.Items["DiveHub.CsrfToken"] is string token)
+{
+    <input type="hidden"
+           name="__RequestVerificationToken"
+           value="@token" />
+}

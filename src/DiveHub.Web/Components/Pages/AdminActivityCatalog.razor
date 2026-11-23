@@ -1,0 +1,343 @@
+@page "/admin/diving-activities"
+@page "/admin/courses"
+
+@attribute [Authorize(Roles = "Admin")]
+
+@using System.Globalization
+@using Microsoft.AspNetCore.Authentication
+
+@inject NavigationManager Navigation
+@inject IHttpContextAccessor RequestContext
+@inject AdminActivityCatalogApiClient Api
+
+<PageTitle>@PageHeading | Dive Hub</PageTitle>
+
+<section class="admin-page">
+    <div class="container">
+
+        <div class="admin-heading">
+            <div>
+                <span class="eyebrow dark">CONTENT MANAGEMENT</span>
+
+                <h1>@PageHeading</h1>
+
+                <p>@PageDescription</p>
+            </div>
+
+            <a href="/admin" class="btn btn-secondary">
+                Back to Dashboard
+            </a>
+        </div>
+
+        @if (Status == "saved")
+        {
+            <div class="notice success">
+                Changes saved successfully.
+            </div>
+        }
+        else if (Status == "invalid")
+        {
+            <div class="notice error">
+                Invalid information. Check the required fields,
+                participant limit and boat requirement.
+            </div>
+        }
+        else if (Status == "notfound")
+        {
+            <div class="notice error">
+                The requested record was not found.
+            </div>
+        }
+        else if (Status == "error")
+        {
+            <div class="notice error">
+                Operation failed. Check the API connection.
+            </div>
+        }
+
+        @if (LoadError)
+        {
+            <div class="notice error">
+                Could not load catalog items.
+                Check your API connection and login session.
+            </div>
+        }
+        else
+        {
+            <div class="admin-grid">
+
+                <AdminSidebar Active="@ReturnKey" />
+
+                <div class="admin-main">
+
+                    <div class="panel-header">
+                        <h2>Create New @ItemLabel</h2>
+
+                        <p>
+                            Configure the experience, pricing
+                            and participation requirements.
+                        </p>
+                    </div>
+
+                    <form method="post"
+                          action="/admin/activity-catalog/create"
+                          class="admin-form catalog-create-form">
+
+                        <CsrfField />
+
+                        <input type="hidden"
+                               name="Kind"
+                               value="@SelectedKind" />
+
+                        <input type="hidden"
+                               name="ReturnTo"
+                               value="@ReturnKey" />
+
+                        <ActivityCatalogFields />
+
+                        <div class="form-actions">
+                            <button type="submit"
+                                    class="btn btn-primary">
+
+                                Create @ItemLabel
+
+                            </button>
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+            <div class="section-heading catalog-section-heading">
+
+                <span class="eyebrow dark">
+                    @PageHeading.ToUpperInvariant() CATALOG
+                </span>
+
+                <h2>Manage Existing @PageHeading</h2>
+
+                <p>@CatalogItems.Count item(s)</p>
+
+            </div>
+
+            @if (CatalogItems.Count == 0)
+            {
+                <div class="empty-state">
+                    <h2>No items yet.</h2>
+
+                    <p>Create your first @ItemLabel above.</p>
+                </div>
+            }
+            else
+            {
+                <div class="content-grid admin-catalog-list">
+
+                    @foreach (var item in CatalogItems)
+                    {
+                        <article class="content-card"
+                                 @key="item.Id">
+
+                            <span class="card-label">
+                                @(item.IsPublished
+                                    ? "PUBLISHED"
+                                    : "DRAFT")
+                            </span>
+
+                            <h2>@item.Name</h2>
+
+                            <div class="catalog-card-facts">
+
+                                <div>
+                                    <span>Price</span>
+
+                                    <strong>
+                                        @item.Price.ToString(
+                                            "0.00",
+                                            CultureInfo.InvariantCulture)
+                                        @item.Currency
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <span>Maximum Participants</span>
+
+                                    <strong>
+                                        @(item.MaxParticipants?.ToString()
+                                            ?? "Not configured")
+                                    </strong>
+                                </div>
+
+                                <div>
+                                    <span>Boat</span>
+
+                                    <strong>
+                                        @(item.RequiresBoat
+                                            ? "Required"
+                                            : "Optional")
+                                    </strong>
+                                </div>
+
+                            </div>
+
+                            @if (!ActivityCatalogRules.HasValidCapacity(
+                                item.MaxParticipants))
+                            {
+                                <div class="notice error">
+                                    Configure a valid participant limit
+                                    before publishing.
+                                </div>
+                            }
+
+                            <details class="catalog-edit">
+
+                                <summary>Edit @ItemLabel</summary>
+
+                                <form method="post"
+                                      action="@($"/admin/activity-catalog/{item.Id}/update")"
+                                      class="admin-form">
+
+                                    <CsrfField />
+
+                                    <input type="hidden"
+                                           name="Kind"
+                                           value="@item.Kind" />
+
+                                    <input type="hidden"
+                                           name="ReturnTo"
+                                           value="@ReturnKey" />
+
+                                    <ActivityCatalogFields Item="@item" />
+
+                                    <button type="submit"
+                                            class="btn btn-secondary">
+
+                                        Save Changes
+
+                                    </button>
+
+                                </form>
+
+                            </details>
+
+                            <ActivityPhotoManager
+                                ActivityId="@item.Id"
+                                ReturnTo="@ReturnKey" />
+
+                            <div class="card-footer">
+
+                                <form method="post"
+                                      action="@($"/admin/activity-catalog/{item.Id}/publication")">
+
+                                    <CsrfField />
+
+                                    <input type="hidden"
+                                           name="ReturnTo"
+                                           value="@ReturnKey" />
+
+                                    <input type="hidden"
+                                           name="IsPublished"
+                                           value="@(item.IsPublished ? "false" : "true")" />
+
+                                    <button type="submit"
+                                            class="btn btn-primary"
+                                            disabled="@(!item.IsPublished && !ActivityCatalogRules.HasValidCapacity(item.MaxParticipants))">
+
+                                        @(item.IsPublished
+                                            ? "Unpublish"
+                                            : "Publish")
+
+                                    </button>
+
+                                </form>
+
+                            </div>
+
+                        </article>
+                    }
+
+                </div>
+            }
+        }
+
+    </div>
+</section>
+
+@code {
+    private IReadOnlyList<ActivityCatalogItem> CatalogItems = [];
+
+    private bool LoadError;
+
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? Status { get; set; }
+
+    private bool IsCoursePage =>
+        string.Equals(
+            Navigation.ToAbsoluteUri(Navigation.Uri)
+                .AbsolutePath.TrimEnd('/'),
+            "/admin/courses",
+            StringComparison.OrdinalIgnoreCase);
+
+    private ActivityKind SelectedKind =>
+        IsCoursePage ? ActivityKind.Course : ActivityKind.Dive;
+
+    private string ReturnKey =>
+        IsCoursePage ? "courses" : "diving-activities";
+
+    private string PageHeading =>
+        IsCoursePage ? "Courses" : "Diving Activities";
+
+    private string ItemLabel =>
+        IsCoursePage ? "Course" : "Diving Activity";
+
+    private string PageDescription =>
+        IsCoursePage
+            ? "Manage training courses, requirements and pricing."
+            : "Manage diving activities, capacity and pricing.";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        LoadError = false;
+        CatalogItems = [];
+
+        var context = RequestContext.HttpContext;
+
+        if (context is null)
+        {
+            LoadError = true;
+            return;
+        }
+
+        var token = await context.GetTokenAsync(
+            "DiveHubWeb", "access_token");
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            LoadError = true;
+            return;
+        }
+
+        try
+        {
+            var allItems = await Api.ListAsync(token);
+
+            CatalogItems = allItems
+                .Where(x => x.Kind == SelectedKind)
+                .OrderBy(x => x.Name)
+                .ToList();
+        }
+        catch (HttpRequestException)
+        {
+            LoadError = true;
+        }
+        catch (TaskCanceledException)
+        {
+            LoadError = true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            LoadError = true;
+        }
+    }
+}

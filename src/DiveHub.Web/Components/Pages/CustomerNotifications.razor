@@ -1,0 +1,227 @@
+@page "/notifications"
+
+@attribute [Authorize(Policy = "CustomerOnly")]
+
+@using System.Globalization
+@using Microsoft.AspNetCore.Authentication
+
+@inject IHttpContextAccessor RequestContext
+@inject CustomerBookingApiClient BookingApi
+
+<PageTitle>Notifications | Dive Hub</PageTitle>
+
+<section class="booking-page">
+
+    <div class="container">
+
+        <div class="booking-heading">
+
+            <span class="eyebrow dark">CUSTOMER ACCOUNT</span>
+
+            <h1>Notifications</h1>
+
+            <p>View reservation decisions and messages from Dive Hub.</p>
+
+            <a href="/account" class="btn btn-secondary">
+                My Account
+            </a>
+
+        </div>
+
+        @if (Status == "error" || LoadError)
+        {
+            <div class="notice error" role="alert">
+                Notification service is currently unavailable.
+                Please try again.
+            </div>
+        }
+
+        @if (!LoadError)
+        {
+            <div class="notification-toolbar">
+
+                <div>
+
+                    <h2>All Notifications</h2>
+
+                    <p>@UnreadCount unread notification(s)</p>
+
+                </div>
+
+                @if (UnreadCount > 0)
+                {
+                    <form method="post"
+                          action="/customer/notifications/read-all">
+
+                        <CsrfField />
+
+                        <button type="submit"
+                                class="btn btn-secondary">
+
+                            Mark All as Read
+
+                        </button>
+
+                    </form>
+                }
+
+            </div>
+
+            @if (Notifications.Count == 0)
+            {
+                <div class="booking-card">
+                    <h2>No notifications yet.</h2>
+                    <p>New reservation updates will appear here.</p>
+                </div>
+            }
+            else
+            {
+                <div class="notification-list">
+
+                    @foreach (var item in Notifications)
+                    {
+                        <article class="@GetCardClass(item)"
+                                 @key="item.Id">
+
+                            <div class="notification-card-header">
+
+                                <div class="notification-title-group">
+
+                                    <h3>@item.Title</h3>
+
+                                    <div class="notification-labels">
+
+                                        @if (item.Kind == CustomerNotificationKind.ReservationConfirmed)
+                                        {
+                                            <span class="notification-status notification-confirmed">
+                                                Confirmed
+                                            </span>
+                                        }
+                                        else if (item.Kind == CustomerNotificationKind.ReservationRejected)
+                                        {
+                                            <span class="notification-status notification-rejected">
+                                                Rejected
+                                            </span>
+                                        }
+
+                                        @if (item.ReadAtUtc is null)
+                                        {
+                                            <span class="customer-notification-badge">
+                                                NEW
+                                            </span>
+                                        }
+
+                                    </div>
+
+                                </div>
+
+                                <time class="notification-date">@item.CreatedAtUtc.ToString("dd MMM yyyy, HH:mm 'UTC'", CultureInfo.InvariantCulture)</time>
+
+                            </div>
+
+                            <p class="notification-message">@item.Message</p>
+
+                            <div class="notification-actions">
+
+                                @if (item.ReservationId is long reservationId)
+                                {
+                                    <a href="@($"/my-reservations#reservation-{reservationId}")"
+                                       class="btn btn-secondary">
+
+                                        View Reservation
+
+                                    </a>
+                                }
+
+                                @if (item.ReadAtUtc is null)
+                                {
+                                    <form method="post"
+                                          action="@($"/customer/notifications/{item.Id}/read")">
+
+                                        <CsrfField />
+
+                                        <button type="submit"
+                                                class="btn btn-primary">
+
+                                            Mark as Read
+
+                                        </button>
+
+                                    </form>
+                                }
+
+                            </div>
+
+                        </article>
+                    }
+
+                </div>
+            }
+        }
+
+    </div>
+
+</section>
+
+@code {
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? Status { get; set; }
+
+    private IReadOnlyList<CustomerNotificationItem> Notifications = [];
+
+    private int UnreadCount;
+
+    private bool LoadError;
+
+    private static string GetCardClass(CustomerNotificationItem item)
+    {
+        return item.ReadAtUtc is null
+            ? "customer-notification-card customer-notification-unread"
+            : "customer-notification-card";
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        LoadError = false;
+        Notifications = [];
+        UnreadCount = 0;
+
+        var context = RequestContext.HttpContext;
+
+        if (context is null)
+        {
+            LoadError = true;
+            return;
+        }
+
+        var token = await context.GetTokenAsync(
+            "DiveHubWeb", "access_token");
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            LoadError = true;
+            return;
+        }
+
+        try
+        {
+            Notifications =
+                await BookingApi.GetNotificationsAsync(token);
+
+            UnreadCount =
+                await BookingApi.GetUnreadNotificationCountAsync(token);
+        }
+        catch (HttpRequestException)
+        {
+            LoadError = true;
+        }
+        catch (TaskCanceledException)
+        {
+            LoadError = true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            LoadError = true;
+        }
+    }
+}
